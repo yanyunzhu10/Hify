@@ -1,0 +1,151 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: hify
+
+  # ===== 数据源（MySQL 主库） =====
+  datasource:
+    url: jdbc:mysql://localhost:3306/hify?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # ===== pgvector 数据源 =====
+  datasource-pg:
+    url: jdbc:postgresql://localhost:5432/hify_vector
+    username: ${PG_USERNAME:postgres}
+    password: ${PG_PASSWORD:}
+
+  # ===== Redis =====
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:}
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+  # ===== Jackson =====
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+  # ===== 异步任务 =====
+  task:
+    execution:
+      pool:
+        core-size: 4
+        max-size: 16
+        queue-capacity: 100
+
+# ===== MyBatis-Plus =====
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  type-aliases-package: com.hify.**.entity
+  global-config:
+    db-config:
+      table-prefix: t_
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    default-enum-type-handler: org.apache.ibatis.type.EnumOrdinalTypeHandler
+
+# ===== Resilience4j =====
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 30s
+        slow-call-rate-threshold: 80
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 5
+    instances:
+      openai:
+        base-config: default
+      claude:
+        base-config: default
+      gemini:
+        base-config: default
+      ollama:
+        base-config: default
+        failure-rate-threshold: 80
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff-multiplier: 2
+        max-wait-duration: 10s
+        retry-exceptions:
+          - java.io.IOException
+          - java.net.SocketTimeoutException
+        ignore-exceptions:
+          - com.hify.common.exception.BizException
+    instances:
+      ollama:
+        max-attempts: 5
+        wait-duration: 2s
+
+# ===== Hify 业务配置 =====
+hify:
+  llm:
+    fallback:
+      openai: ollama
+      claude: openai
+      gemini: ollama
+  async:
+    llm-pool:
+      core-size: 20
+      max-size: 50
+      queue-capacity: 100
+    llm-stream-pool:
+      core-size: 30
+      max-size: 80
+      queue-capacity: 50
+
+# ===== Actuator =====
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# ===== 日志 =====
+logging:
+  config: classpath:logback-spring.xml
+
+---
+# ===== 开发环境覆盖 =====
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    # 开发环境启用 p6spy 慢查询拦截
+    driver-class-name: com.p6spy.engine.spy.P6SpyDriver
+    url: jdbc:p6spy:mysql://localhost:3306/hify?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
+
+logging:
+  level:
+    com.hify: DEBUG
+    org.springframework.web: DEBUG
