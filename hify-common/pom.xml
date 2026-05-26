@@ -55,7 +55,7 @@
             <artifactId>mybatis-plus-jsqlparser</artifactId>
         </dependency>
         <dependency>
-            <groupId>net.sf.jsqlparser</groupId>
+            <groupId>com.github.jsqlparser</groupId>
             <artifactId>jsqlparser</artifactId>
         </dependency>
     </dependencies>

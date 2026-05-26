@@ -34,7 +34,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Third-party versions unified here -->
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
-        <jsqlparser.version>4.9</jsqlparser.version>
+        <jsqlparser.version>5.0</jsqlparser.version>
         <mysql.version>8.4.0</mysql.version>
         <postgresql.version>42.7.4</postgresql.version>
         <pgvector.version>0.1.6</pgvector.version>
@@ -101,8 +101,9 @@
                 <version>${mybatis-plus.version}</version>
             </dependency>
             <!-- mybatis-plus-jsqlparser 将 jsqlparser 声明为 optional，需显式引入 -->
+            <!-- 3.5.9+ 起 groupId 从 net.sf.jsqlparser 改为 com.github.jsqlparser，版本升至 5.0 -->
             <dependency>
-                <groupId>net.sf.jsqlparser</groupId>
+                <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
                 <version>${jsqlparser.version}</version>
             </dependency>
@@ -183,4 +184,19 @@
             </plugins>
         </pluginManagement>
     </build>
+
+    <!--
+      mirrorOf=central 只拦截内置 ID 为 "central" 的仓库。
+      使用不同 ID 可绕过 Aliyun 镜像，直连 Maven Central 兜底，
+      解决 Aliyun 镜像尚未同步新版依赖（如 jsqlparser:4.9）的问题。
+    -->
+    <repositories>
+        <repository>
+            <id>central-direct</id>
+            <name>Maven Central (direct fallback)</name>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+    </repositories>
 </project>
