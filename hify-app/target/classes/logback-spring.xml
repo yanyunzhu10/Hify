@@ -4,18 +4,22 @@
     <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="hify"/>
 
     <property name="LOG_DIR" value="logs"/>
+    <!-- 文件 / 默认 pattern：含 traceId，时间精确到秒 -->
     <property name="LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n"/>
+              value="%d{HH:mm:ss} [%thread] [%X{traceId}] %-5level %logger{20} - %msg%n"/>
+    <!-- 控制台彩色 pattern（仅 dev），日期补上以便排查 -->
+    <property name="CONSOLE_PATTERN"
+              value="%d{HH:mm:ss} [%thread] [%X{traceId}] %highlight(%-5level) %cyan(%logger{20}) - %msg%n"/>
 
-    <!-- ===== 控制台（开发环境） ===== -->
+    <!-- ===== 控制台（开发） ===== -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
+            <pattern>${CONSOLE_PATTERN}</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
 
-    <!-- ===== 应用日志（按天滚动，保留 30 天） ===== -->
+    <!-- ===== 文件（开发：纯文本） ===== -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/${appName}.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -29,7 +33,22 @@
         </encoder>
     </appender>
 
-    <!-- ===== 错误日志单独收集（需人工介入的故障） ===== -->
+    <!-- ===== 文件（生产：JSON 结构化） ===== -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${appName}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/${appName}.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <customFields>{"app":"${appName}"}</customFields>
+            <timeZone>Asia/Shanghai</timeZone>
+        </encoder>
+    </appender>
+
+    <!-- ===== 错误日志单独收集 ===== -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/${appName}-error.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
@@ -47,7 +66,7 @@
         </encoder>
     </appender>
 
-    <!-- ===== LLM 调用专项日志（cost 分析用） ===== -->
+    <!-- ===== LLM 调用专项日志 ===== -->
     <appender name="LLM_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/${appName}-llm.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -60,13 +79,12 @@
         </encoder>
     </appender>
 
-    <!-- LLM 调用日志路由到专项文件 -->
     <logger name="com.hify.modules.provider" level="INFO" additivity="false">
         <appender-ref ref="LLM_FILE"/>
         <appender-ref ref="FILE"/>
     </logger>
 
-    <!-- ===== 各环境根日志级别 ===== -->
+    <!-- ===== 各环境根日志 ===== -->
     <springProfile name="dev">
         <root level="DEBUG">
             <appender-ref ref="CONSOLE"/>
@@ -77,12 +95,11 @@
 
     <springProfile name="prod">
         <root level="INFO">
-            <appender-ref ref="FILE"/>
+            <appender-ref ref="JSON_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
         </root>
     </springProfile>
 
-    <!-- 默认（未指定 profile） -->
     <springProfile name="!dev &amp; !prod">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>

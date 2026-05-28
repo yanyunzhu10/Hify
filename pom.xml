@@ -42,6 +42,7 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <p6spy.version>3.9.1</p6spy.version>
         <guava.version>33.3.1-jre</guava.version>
+        <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
     </properties>
 
     <dependencyManagement>
@@ -166,6 +167,13 @@
                 <groupId>p6spy</groupId>
                 <artifactId>p6spy</artifactId>
                 <version>${p6spy.version}</version>
+            </dependency>
+
+            <!-- ===== Logstash Logback Encoder (生产环境 JSON 输出) ===== -->
+            <dependency>
+                <groupId>net.logstash.logback</groupId>
+                <artifactId>logstash-logback-encoder</artifactId>
+                <version>${logstash-logback-encoder.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
