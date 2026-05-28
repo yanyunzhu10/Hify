@@ -81,4 +81,22 @@ cd "$ROOT_DIR/hify-web"
 ./node_modules/.bin/vite > "$ROOT_DIR/logs/frontend.log" 2>&1 &
 echo $! > "$FRONTEND_PID_FILE"
 info "前端已启动（PID: $(cat "$FRONTEND_PID_FILE")），日志：logs/frontend.log"
+
+# ── 7. 等待前端就绪 ──────────────────────────────────────────────────
+info "等待前端就绪..."
+FE_MAX_WAIT=30
+fe_waited=0
+until curl -sf http://localhost:5173/ > /dev/null 2>&1; do
+  if ! kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
+    error "前端进程意外退出，查看日志：logs/frontend.log"
+  fi
+  if [ "$fe_waited" -ge "$FE_MAX_WAIT" ]; then
+    error "前端 ${FE_MAX_WAIT}s 内未就绪，查看日志：logs/frontend.log"
+  fi
+  sleep 1
+  fe_waited=$((fe_waited + 1))
+  echo -ne "\r  已等待 ${fe_waited}s / ${FE_MAX_WAIT}s ..."
+done
+echo ""
+info "前端健康检查通过（http://localhost:5173/）"
 info "所有服务已就绪，使用 ./stop.sh 停止"

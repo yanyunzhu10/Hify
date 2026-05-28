@@ -1,0 +1,41 @@
+# ===== Build output =====
+target/
+build/
+out/
+dist/
+*.class
+*.jar
+*.war
+
+# ===== IDE =====
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+
+# ===== Maven =====
+.mvn/wrapper/maven-wrapper.jar
+
+# ===== Node / 前端 =====
+hify-web/node_modules/
+hify-web/dist/
+hify-web/.vite/
+npm-debug.log*
+
+# ===== 日志 / 运行时 =====
+logs/
+*.log
+*.pid
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== 本地敏感配置 =====
+**/application-local.yml
+.env
+.env.local
