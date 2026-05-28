@@ -8,4 +8,4 @@ mysql:8.0 \
 docker run -d --name redis -p 6379:6379 redis:7
 
 
-cd hify-web && npm run dev  启动前端？。
+cd hify-web && npm run dev  启动前端

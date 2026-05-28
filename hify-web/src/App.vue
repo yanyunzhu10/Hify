@@ -1,5 +1,5 @@
 <template>
-  <el-container class="layout">
+  <div class="layout">
     <aside class="sidebar" :class="{ 'is-collapsed': collapsed }">
       <!-- Logo 区 -->
       <div class="brand">
@@ -37,13 +37,13 @@
       </div>
     </aside>
 
-    <el-container>
+    <div class="content">
       <AppHeader />
-      <el-main class="main">
+      <main class="main">
         <RouterView />
-      </el-main>
-    </el-container>
-  </el-container>
+      </main>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -74,6 +74,17 @@ const isActive = (path: string) => currentTop.value === path
 <style scoped>
 .layout {
   height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ========== 内容主区（顶栏 + 滚动区） ========== */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ========== Sidebar 容器 ========== */
@@ -289,8 +300,8 @@ const isActive = (path: string) => currentTop.value === path
 
 /* ========== Main ========== */
 .main {
+  flex: 1;
   background: var(--bg-base);
-  padding: 0;
   overflow: auto;
 }
 </style>
