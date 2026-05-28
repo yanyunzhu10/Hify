@@ -109,37 +109,38 @@ public ThreadPoolExecutor llmStreamExecutor() {
 }
 ```
 
-### OkHttpClient 
+### HTTP 客户端（LlmHttpClient）
+
+LLM 通用 HTTP 调用统一走 `com.hify.common.http.LlmHttpClient`：
+
+- **普通请求 → RestTemplate**：connectTimeout = 5s，readTimeout = 60s
+- **流式 SSE → OkHttp**：connectTimeout = 5s，readTimeout = 0（长连接不能有读超时，否则 LLM 长输出会被误断）
 
 ```java
-// 非流式：有 readTimeout
-@Bean("standardLlmClient")
-public OkHttpClient standardLlmClient() {
-    return new OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .connectionPool(new ConnectionPool(20, 5, TimeUnit.MINUTES))
-        .addInterceptor(new LoggingInterceptor())
-        .build();
-}
+// 非流式：RestTemplate
+SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+factory.setConnectTimeout(5_000);
+factory.setReadTimeout(60_000);
+this.restTemplate = new RestTemplate(factory);
 
-// 流式：readTimeout 设为 0（SSE 不能有读超时）
-@Bean("streamLlmClient")
-public OkHttpClient streamLlmClient() {
-    return new OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build();
-}
+// 流式：OkHttp
+this.okHttpClient = new OkHttpClient.Builder()
+    .connectTimeout(5, TimeUnit.SECONDS)
+    .readTimeout(0, TimeUnit.SECONDS)
+    .build();
 ```
+
+异常统一转为 `LlmApiException`，区分 `TIMEOUT` / `AUTH_FAILED` (401/403) / `RATE_LIMITED` (429) / `OTHER`。
 
 ### 超时层次（三层保护）
 
-1. OkHttp connectTimeout = 5s（TCP 握手超时）
-2. OkHttp readTimeout = 120s（单次读取超时，仅非流式）
-3. CompletableFuture.get(90, TimeUnit.SECONDS)（总体超时兜底）
+| 层 | 非流式 | 流式 SSE |
+|----|--------|----------|
+| 1. TCP 握手 | RestTemplate connectTimeout = 5s | OkHttp connectTimeout = 5s |
+| 2. 单次读取 | RestTemplate readTimeout = 60s | 无（readTimeout = 0，SSE 必须） |
+| 3. 总体兜底 | CompletableFuture.get(90s) 包 post() 调用 | 由 controller 层的 SseEmitter timeout 控制 |
+
+**调用方必须用 `CompletableFuture.supplyAsync(..., llmExecutor).get(90, SECONDS)` 包住 `post()`**，因为 RestTemplate 没有"总超时"概念，单请求最长会卡到 60s read。
 
 ### 重试策略（Resilience4j）
 

@@ -19,7 +19,9 @@ public enum ErrorCode {
     INTERNAL_ERROR(500, "系统内部错误"),
     SERVICE_UNAVAILABLE(503, "服务暂不可用"),
     LLM_CALL_FAILED(502, "LLM 调用失败"),
-    LLM_TIMEOUT(504, "LLM 调用超时");
+    LLM_TIMEOUT(504, "LLM 调用超时"),
+    LLM_AUTH_FAILED(401, "LLM 认证失败"),
+    LLM_RATE_LIMITED(429, "LLM 限流");
 
     private final int code;
     private final String message;

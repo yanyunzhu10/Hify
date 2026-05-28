@@ -65,43 +65,17 @@ mybatis-plus:
     default-enum-type-handler: org.apache.ibatis.type.EnumOrdinalTypeHandler
 
 # ===== Resilience4j =====
+# 仅声明 default 配置；具体熔断器实例由 CircuitBreakerService 按 providerName 动态创建
+# 重试逻辑不走 resilience4j-retry，由 CircuitBreakerService 按 LlmApiException.Type 自定义
 resilience4j:
   circuitbreaker:
     configs:
       default:
         sliding-window-type: COUNT_BASED
-        sliding-window-size: 20
+        sliding-window-size: 10
         failure-rate-threshold: 50
-        slow-call-duration-threshold: 30s
-        slow-call-rate-threshold: 80
         wait-duration-in-open-state: 30s
-        permitted-calls-in-half-open-state: 5
-    instances:
-      openai:
-        base-config: default
-      claude:
-        base-config: default
-      gemini:
-        base-config: default
-      ollama:
-        base-config: default
-        failure-rate-threshold: 80
-  retry:
-    configs:
-      default:
-        max-attempts: 3
-        wait-duration: 500ms
-        exponential-backoff-multiplier: 2
-        max-wait-duration: 10s
-        retry-exceptions:
-          - java.io.IOException
-          - java.net.SocketTimeoutException
-        ignore-exceptions:
-          - com.hify.common.exception.BizException
-    instances:
-      ollama:
-        max-attempts: 5
-        wait-duration: 2s
+        permitted-number-of-calls-in-half-open-state: 3
 
 # ===== Hify 业务配置 =====
 hify:
@@ -119,6 +93,15 @@ hify:
       core-size: 30
       max-size: 80
       queue-capacity: 50
+  resilience:
+    retry:
+      # 网络超时：固定间隔重试
+      timeout:
+        max-attempts: 2
+        interval: 1s
+      # 限流（429）：指数退避，列表长度即重试次数
+      rate-limit:
+        backoffs: [2s, 4s]
 
 # ===== Actuator =====
 management:
