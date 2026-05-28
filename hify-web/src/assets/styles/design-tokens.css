@@ -137,6 +137,10 @@
   /* 品牌色发光（关键 CTA / 激活态） */
   --shadow-brand: 0 4px 14px rgba(99, 91, 255, 0.32);
 
+  /* 按钮渐变（主操作） */
+  --gradient-brand: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-600) 60%, var(--cyan-500) 140%);
+  --gradient-brand-hover: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-700) 60%, var(--cyan-600) 140%);
+
   /* ============================================================
    * 9. 字号 / 行高 / 字重
    * ============================================================ */

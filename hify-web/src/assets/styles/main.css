@@ -192,3 +192,83 @@ code, kbd, pre {
   outline: none;
   box-shadow: var(--ring-focus);
 }
+
+/* ============================================================
+ * 按钮系统 — Element Plus 主按钮覆盖（无侵入：写 type="primary" 即可）
+ * ============================================================ */
+.el-button--primary {
+  background: var(--gradient-brand) !important;
+  border: none !important;
+  color: #fff !important;
+  font-weight: var(--weight-medium);
+  box-shadow: 0 1px 2px rgba(99, 91, 255, 0.16),
+              0 4px 14px rgba(99, 91, 255, 0.20);
+  transition: var(--transition-base);
+}
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background: var(--gradient-brand-hover) !important;
+  box-shadow: 0 2px 4px rgba(99, 91, 255, 0.20),
+              0 8px 20px rgba(99, 91, 255, 0.28);
+  transform: translateY(-1px);
+}
+.el-button--primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(99, 91, 255, 0.16);
+}
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover {
+  background: var(--brand-200) !important;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+
+/* 次要按钮：白底 + 描边 */
+.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning):not(.el-button--text):not(.el-button--link) {
+  background: var(--bg-canvas);
+  border-color: var(--border-base);
+  color: var(--text-regular);
+  font-weight: var(--weight-medium);
+  transition: var(--transition-base);
+}
+.el-button:not(.el-button--primary):not(.el-button--danger):hover {
+  border-color: var(--brand-400);
+  color: var(--brand-600);
+  background: var(--bg-canvas);
+}
+
+/* 危险按钮：保持 Element Plus 红色，仅微调阴影 */
+.el-button--danger {
+  font-weight: var(--weight-medium);
+}
+
+/* ============================================================
+ * 内容区与页面骨架（页面边距 24 / 卡片内边距 20 / 元素间距 16）
+ * ============================================================ */
+.page-content {
+  padding: var(--space-6);              /* 24px 页面边距 */
+  background: var(--bg-base);
+  min-height: 100%;
+}
+.page-content > * + * {
+  margin-top: var(--space-4);           /* 16px 元素间距 */
+}
+
+.content-card {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-5);              /* 20px 卡片内边距 */
+  transition: var(--transition-shadow);
+}
+.content-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+.content-card-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
