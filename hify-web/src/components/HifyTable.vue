@@ -33,6 +33,8 @@
       :border="border"
       :height="height"
       :max-height="maxHeight"
+      :row-style="rowStyle"
+      :cell-style="cellStyle"
       style="width: 100%"
       @row-click="(row: T) => emit('row-click', row)"
     >
@@ -79,11 +81,11 @@
   </div>
 </template>
 
-<script setup lang="ts" generic="T extends Record<string, unknown>">
+<script setup lang="ts" generic="T extends object">
 import { ref, shallowRef, onMounted, watch } from 'vue'
 import type { PageResult, PageQuery } from '@/types'
 
-export interface HifyTableColumn<R = Record<string, unknown>> {
+export interface HifyTableColumn<R = object> {
   /** 列头文案 */
   label: string
   /** 字段 prop；用 slot 时可不传 */
@@ -125,6 +127,10 @@ interface Props<R> {
   extraQuery?: Record<string, unknown>
   /** 挂载时立即拉取 */
   immediate?: boolean
+  /** 行样式（透传 el-table row-style），可传对象或函数 */
+  rowStyle?: Record<string, string> | ((scope: { row: T; rowIndex: number }) => Record<string, string>)
+  /** 单元格样式（透传 el-table cell-style） */
+  cellStyle?: Record<string, string> | ((scope: { row: T; column: unknown; rowIndex: number; columnIndex: number }) => Record<string, string>)
 }
 
 const props = withDefaults(defineProps<Props<T>>(), {
@@ -139,6 +145,8 @@ const props = withDefaults(defineProps<Props<T>>(), {
   emptyText: '暂无数据',
   extraQuery: () => ({}),
   immediate: true,
+  rowStyle: undefined,
+  cellStyle: undefined,
 })
 
 const emit = defineEmits<{
@@ -212,9 +220,25 @@ onMounted(() => {
 .hify-table {
   width: 100%;
 }
+
+/* 表头浅灰、悬停行微变色，全部通过 el-table 自带的 CSS 变量覆盖，
+   不直接改组件选择器，便于父级再次微调 */
+.hify-table :deep(.el-table) {
+  --el-table-header-bg-color: var(--color-bg-secondary);
+  --el-table-header-text-color: var(--text-regular);
+  --el-table-row-hover-bg-color: var(--bg-subtle);
+  --el-table-border-color: var(--border-light);
+  --el-table-tr-bg-color: var(--color-bg-primary);
+}
+.hify-table :deep(.el-table th.el-table__cell) {
+  font-weight: var(--weight-semi);
+}
+
+/* 表格底部：细分割线 + 右对齐分页器 */
 .hify-table-pagination {
   display: flex;
   justify-content: flex-end;
-  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-light);
 }
 </style>

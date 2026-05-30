@@ -196,6 +196,9 @@
   --layout-content-max-w:   1440px;
   --layout-page-padding:    var(--space-6);
 
+  /* 响应式断点（与 src/composables/useViewport.ts 默认值保持一致） */
+  --breakpoint-narrow:      1200px;
+
   /* ============================================================
    * 12. 动效 — Motion
    * 短促、克制，不做炫技动画

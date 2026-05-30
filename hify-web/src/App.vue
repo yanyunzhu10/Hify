@@ -27,7 +27,12 @@
 
       <!-- 底部 -->
       <div class="sidebar-footer">
-        <button class="collapse-btn" @click="toggle" :title="collapsed ? '展开' : '折叠'">
+        <button
+          v-if="!isNarrow"
+          class="collapse-btn"
+          :title="collapsed ? '展开' : '折叠'"
+          @click="toggle"
+        >
           <el-icon>
             <component :is="collapsed ? 'Expand' : 'Fold'" />
           </el-icon>
@@ -50,6 +55,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import { useViewport } from '@/composables/useViewport'
 
 const route = useRoute()
 
@@ -60,12 +66,20 @@ const menu = [
 ]
 
 const COLLAPSE_KEY = 'hify_sidebar_collapsed'
-const collapsed = ref(localStorage.getItem(COLLAPSE_KEY) === '1')
+
+// 视口 < 1200px 时强制折叠（窄屏模式）；>= 1200px 时尊重用户上次的偏好
+const { isNarrow } = useViewport(1200)
+const userPref = ref(localStorage.getItem(COLLAPSE_KEY) === '1')
+const collapsed = computed(() => isNarrow.value || userPref.value)
 
 const version = '0.1.0'
 
-const toggle = () => (collapsed.value = !collapsed.value)
-watch(collapsed, (v) => localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'))
+// 窄屏下禁用手动切换；宽屏下切换并持久化用户偏好
+const toggle = () => {
+  if (isNarrow.value) return
+  userPref.value = !userPref.value
+}
+watch(userPref, (v) => localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'))
 
 const currentTop = computed(() => '/' + route.path.split('/')[1])
 const isActive = (path: string) => currentTop.value === path

@@ -53,7 +53,7 @@
       :disabled="submitting"
       @submit.prevent="handleSubmit"
     >
-      <slot :form="formData" :mode="mode" />
+      <slot :form="formData.value" :mode="mode" />
     </el-form>
 
     <template #footer>
@@ -71,7 +71,7 @@
   </el-dialog>
 </template>
 
-<script setup lang="ts" generic="T extends Record<string, unknown>">
+<script setup lang="ts" generic="T extends object">
 import { ref, computed, nextTick } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 
@@ -119,11 +119,10 @@ const formRef = ref<FormInstance>()
 const formData = ref<T>({ ...(props.defaultForm as T) }) as { value: T }
 const submitting = ref(false)
 
-const mode = computed<'create' | 'edit'>(() =>
-  formData.value[props.editKey] != null && formData.value[props.editKey] !== ''
-    ? 'edit'
-    : 'create',
-)
+const mode = computed<'create' | 'edit'>(() => {
+  const value = (formData.value as Record<string, unknown>)[props.editKey]
+  return value != null && value !== '' ? 'edit' : 'create'
+})
 
 const dialogTitle = computed(() => {
   if (props.titleFormatter) return props.titleFormatter(mode.value)

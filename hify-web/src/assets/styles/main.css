@@ -68,25 +68,8 @@ code, kbd, pre {
   padding: var(--layout-page-padding);
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-5);
-}
-
-.page-header h2 {
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-semi);
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
-}
-
-.page-header .subtitle {
-  margin-top: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
+/* .page-header 样式由 PageHeader.vue 组件自身管理，
+   元素间距统一由 .page-content > * + *（16px）控制 */
 
 /* ============================================================
  * 卡片容器（管理后台核心容器）
@@ -195,8 +178,10 @@ code, kbd, pre {
 
 /* ============================================================
  * 按钮系统 — Element Plus 主按钮覆盖（无侵入：写 type="primary" 即可）
+ * 注意：所有渐变/实底覆盖必须排除 .is-text 和 .is-link，
+ *      否则 <el-button text type="primary"> 这类会被错误地填上背景。
  * ============================================================ */
-.el-button--primary {
+.el-button--primary:not(.is-text):not(.is-link) {
   background: var(--gradient-brand) !important;
   border: none !important;
   color: #fff !important;
@@ -205,19 +190,19 @@ code, kbd, pre {
               0 4px 14px rgba(99, 91, 255, 0.20);
   transition: var(--transition-base);
 }
-.el-button--primary:hover,
-.el-button--primary:focus {
+.el-button--primary:not(.is-text):not(.is-link):hover,
+.el-button--primary:not(.is-text):not(.is-link):focus {
   background: var(--gradient-brand-hover) !important;
   box-shadow: 0 2px 4px rgba(99, 91, 255, 0.20),
               0 8px 20px rgba(99, 91, 255, 0.28);
   transform: translateY(-1px);
 }
-.el-button--primary:active {
+.el-button--primary:not(.is-text):not(.is-link):active {
   transform: translateY(0);
   box-shadow: 0 1px 2px rgba(99, 91, 255, 0.16);
 }
-.el-button--primary.is-disabled,
-.el-button--primary.is-disabled:hover {
+.el-button--primary:not(.is-text):not(.is-link).is-disabled,
+.el-button--primary:not(.is-text):not(.is-link).is-disabled:hover {
   background: var(--brand-200) !important;
   box-shadow: none;
   transform: none;
@@ -242,8 +227,8 @@ code, kbd, pre {
   color: var(--brand-700);
 }
 
-/* 危险按钮：红色实底 */
-.el-button--danger {
+/* 危险按钮：红色实底（同样排除 text / link 变体） */
+.el-button--danger:not(.is-text):not(.is-link) {
   background: var(--color-danger) !important;
   border-color: var(--color-danger) !important;
   color: #fff !important;
@@ -252,26 +237,44 @@ code, kbd, pre {
               0 4px 12px rgba(239, 68, 68, 0.18);
   transition: var(--transition-base);
 }
-.el-button--danger:hover,
-.el-button--danger:focus {
+.el-button--danger:not(.is-text):not(.is-link):hover,
+.el-button--danger:not(.is-text):not(.is-link):focus {
   background: #DC2626 !important;
   border-color: #DC2626 !important;
   box-shadow: 0 2px 4px rgba(239, 68, 68, 0.20),
               0 8px 18px rgba(239, 68, 68, 0.24);
   transform: translateY(-1px);
 }
-.el-button--danger:active {
+.el-button--danger:not(.is-text):not(.is-link):active {
   transform: translateY(0);
   background: #B91C1C !important;
   border-color: #B91C1C !important;
 }
-.el-button--danger.is-disabled,
-.el-button--danger.is-disabled:hover {
+.el-button--danger:not(.is-text):not(.is-link).is-disabled,
+.el-button--danger:not(.is-text):not(.is-link).is-disabled:hover {
   background: #FCA5A5 !important;
   border-color: #FCA5A5 !important;
   box-shadow: none;
   transform: none;
   cursor: not-allowed;
+}
+
+/* Text 类型按钮：保持透明背景 + 类型色文字，仅 hover 时浅底强调 */
+.el-button.is-text.el-button--primary {
+  color: var(--brand-600);
+}
+.el-button.is-text.el-button--primary:hover,
+.el-button.is-text.el-button--primary:focus {
+  color: var(--brand-700);
+  background: var(--brand-50);
+}
+.el-button.is-text.el-button--danger {
+  color: var(--color-danger);
+}
+.el-button.is-text.el-button--danger:hover,
+.el-button.is-text.el-button--danger:focus {
+  color: #B91C1C;
+  background: var(--color-danger-soft);
 }
 
 /* ============================================================
