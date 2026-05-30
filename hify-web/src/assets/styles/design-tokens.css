@@ -67,12 +67,16 @@
    * 4. 背景色阶 — Surface
    * 浅底为主；深色仅用于侧边栏 / 顶栏深模式
    * ============================================================ */
-  --bg-base:     #FAFAFB;  /* 页面底色（略冷的米白） */
+  --bg-base:     #F5F6F8;  /* 页面底色（浅灰，与白色卡片形成层次） */
   --bg-canvas:   #FFFFFF;  /* 卡片/表格容器 */
   --bg-elevated: #FFFFFF;  /* 弹层/Drawer */
-  --bg-subtle:   #F4F5F7;  /* hover、表头、disabled 输入框 */
-  --bg-muted:    #EDEEF1;  /* 分组背景、tag 默认底 */
+  --bg-subtle:   #EFF1F4;  /* hover、表头、disabled 输入框 */
+  --bg-muted:    #E7EAEE;  /* 分组背景、tag 默认底 */
   --bg-overlay:  rgba(15, 17, 21, 0.45); /* Modal 遮罩 */
+
+  /* 语义化别名：内容区主背景（浅灰） */
+  --color-bg-primary:    var(--bg-canvas);
+  --color-bg-secondary:  var(--bg-base);
 
   /* 深色 — 侧边栏 / 顶栏 */
   --bg-sidebar:        #0F1115;  /* 主侧边栏底 */

@@ -1,12 +1,14 @@
 <template>
   <header class="app-header">
-    <!-- 面包屑 -->
-    <nav class="breadcrumb">
-      <RouterLink to="/" class="crumb crumb-home">
+    <!-- 面包屑：显示当前页面路径 -->
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <RouterLink to="/" class="crumb crumb-home" title="工作台">
         <el-icon><HomeFilled /></el-icon>
       </RouterLink>
       <template v-for="(item, idx) in trail" :key="`${item.path}-${idx}`">
-        <span class="crumb-sep">/</span>
+        <span class="crumb-sep">
+          <el-icon><ArrowRight /></el-icon>
+        </span>
         <RouterLink
           v-if="idx < trail.length - 1 && item.path && item.path !== '/'"
           :to="item.path"
@@ -20,17 +22,11 @@
       </template>
     </nav>
 
-    <!-- 用户区 -->
+    <!-- 用户区：头像 + 用户名 placeholder -->
     <div class="user-area">
-      <button class="header-icon-btn" title="通知">
-        <el-icon><Bell /></el-icon>
-      </button>
       <div class="user">
         <div class="avatar">U</div>
-        <div class="user-meta">
-          <div class="user-name">User</div>
-          <div class="user-role">Developer</div>
-        </div>
+        <span class="user-name">用户名</span>
       </div>
     </div>
   </header>
@@ -60,7 +56,7 @@ const trail = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--space-6);
-  background: var(--bg-canvas);
+  background: var(--color-bg-primary);
   border-bottom: 1px solid var(--border-light);
   position: sticky;
   top: 0;
@@ -71,19 +67,23 @@ const trail = computed(() => {
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   font-size: var(--text-sm);
+  min-width: 0;
 }
 .crumb {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 6px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-decoration: none;
   transition: var(--transition-color);
   white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .crumb:hover {
   color: var(--text-primary);
@@ -101,8 +101,10 @@ const trail = computed(() => {
   font-size: 14px;
 }
 .crumb-sep {
+  display: inline-flex;
+  align-items: center;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: 10px;
   user-select: none;
 }
 
@@ -112,29 +114,12 @@ const trail = computed(() => {
   align-items: center;
   gap: var(--space-3);
 }
-.header-icon-btn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: var(--transition-color);
-  position: relative;
-}
-.header-icon-btn:hover {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-}
 .user {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 8px 4px 4px;
-  border-radius: var(--radius-md);
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: var(--transition-color);
 }
@@ -148,23 +133,15 @@ const trail = computed(() => {
   display: grid;
   place-items: center;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--brand-400), var(--cyan-500));
+  background: var(--gradient-brand);
   color: #fff;
   font-size: 12px;
   font-weight: var(--weight-bold);
-}
-.user-meta {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
+  box-shadow: 0 2px 6px rgba(99, 91, 255, 0.28);
 }
 .user-name {
   font-size: var(--text-sm);
-  font-weight: var(--weight-semi);
+  font-weight: var(--weight-medium);
   color: var(--text-primary);
-}
-.user-role {
-  font-size: 11px;
-  color: var(--text-tertiary);
 }
 </style>

@@ -301,7 +301,7 @@ const isActive = (path: string) => currentTop.value === path
 /* ========== Main ========== */
 .main {
   flex: 1;
-  background: var(--bg-base);
+  background: var(--color-bg-secondary);
   overflow: auto;
 }
 </style>
