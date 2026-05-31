@@ -10,22 +10,42 @@ export interface PageResult<T> {
   size: number
 }
 
+export interface ModelConfigBrief {
+  id: number
+  name: string
+  modelId: string
+  contextSize?: number
+  enabled: number
+}
+
+export interface ProviderHealthBrief {
+  status: 'UP' | 'DOWN' | 'DEGRADED' | 'UNKNOWN'
+  lastCheckAt?: string
+  lastSuccessAt?: string
+  failCount: number
+  latencyMs?: number
+  errorMessage?: string
+}
+
 export interface ProviderConfig {
   id: number
   name: string
-  provider: 'openai' | 'claude' | 'gemini' | 'ollama'
+  type: string
   baseUrl: string
-  apiKey: string
-  modelId: string
-  enabled: boolean
+  authConfig?: Record<string, unknown>
+  enabled: number
   createdAt: string
   updatedAt: string
+  modelCount: number
+  modelConfigs?: ModelConfigBrief[]
+  health?: ProviderHealthBrief
 }
 
-export interface ProviderTestResult {
+export interface ConnectionTestResult {
   success: boolean
   latencyMs: number
-  message?: string
+  modelCount?: number
+  errorMessage?: string
 }
 
 export interface AgentConfig {

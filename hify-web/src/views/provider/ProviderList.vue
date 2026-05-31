@@ -2,7 +2,7 @@
   <div class="page-content">
     <PageHeader
       title="模型提供商管理"
-      description="集中管理 OpenAI / Claude / Gemini / Ollama 等 LLM 提供商配置，支持连通性测试与启停切换"
+      description="集中管理 LLM 提供商配置，支持连通性测试与启停切换"
     >
       <template #actions>
         <el-button type="primary" @click="openCreate">
@@ -17,13 +17,13 @@
       <HifyTable
         ref="tableRef"
         :columns="columns"
-        :api="listProviderPage"
+        :api="getProviderList"
         row-key="id"
         :row-style="{ height: '52px' }"
       >
-        <template #col-provider="{ row }">
-          <el-tag :type="providerTagType(row.provider)" size="small" effect="light">
-            {{ providerLabel(row.provider) }}
+        <template #col-type="{ row }">
+          <el-tag :type="providerTagType(row.type)" size="small" effect="light">
+            {{ providerLabel(row.type) }}
           </el-tag>
         </template>
 
@@ -33,16 +33,61 @@
 
         <template #col-enabled="{ row }">
           <el-tag
-            :type="row.enabled ? 'success' : 'info'"
-            :class="['status-tag', row.enabled ? 'is-enabled' : 'is-disabled']"
+            :type="row.enabled === 1 ? 'success' : 'info'"
+            :class="['status-tag', row.enabled === 1 ? 'is-enabled' : 'is-disabled']"
             size="small"
             effect="light"
           >
-            {{ row.enabled ? '启用' : '禁用' }}
+            {{ row.enabled === 1 ? '启用' : '禁用' }}
           </el-tag>
         </template>
 
+        <template #col-health="{ row }">
+          <div v-if="row.health" class="health-cell">
+            <el-tag :type="healthTagType(row.health.status)" size="small" effect="light">
+              {{ healthLabel(row.health.status) }}
+            </el-tag>
+            <span v-if="row.health.latencyMs != null" class="latency-text">
+              {{ row.health.latencyMs }}ms
+            </span>
+          </div>
+          <span v-else class="text-tertiary">—</span>
+        </template>
+
+        <template #col-models="{ row }">
+          <template v-if="row.modelCount > 0">
+            <el-popover placement="bottom-start" :width="260" trigger="click">
+              <template #reference>
+                <el-link type="primary" :underline="false" class="model-count-link">
+                  {{ row.modelCount }} 个
+                </el-link>
+              </template>
+              <div class="model-popover-list">
+                <div
+                  v-for="m in row.modelConfigs"
+                  :key="m.id"
+                  class="model-popover-item"
+                >
+                  <span class="model-name">{{ m.name }}</span>
+                  <span class="model-id">{{ m.modelId }}</span>
+                  <el-tag
+                    :type="m.enabled === 1 ? 'primary' : 'info'"
+                    size="small"
+                    class="model-status-tag"
+                  >
+                    {{ m.enabled === 1 ? '启用' : '禁用' }}
+                  </el-tag>
+                </div>
+              </div>
+            </el-popover>
+          </template>
+          <span v-else class="text-tertiary">0</span>
+        </template>
+
         <template #col-actions="{ row }">
+          <el-button text type="primary" size="small" @click="onTestConnection(row)">
+            测试
+          </el-button>
           <el-button text type="primary" size="small" @click="openEdit(row)">
             编辑
           </el-button>
@@ -68,15 +113,15 @@
         <el-form-item label="名称" prop="name">
           <el-input
             v-model="form.name"
-            placeholder="给提供商起一个易识别的名字，如 OpenAI 主账号"
+            placeholder="给提供商起一个易识别的名字"
             maxlength="50"
             show-word-limit
           />
         </el-form-item>
 
-        <el-form-item label="类型" prop="provider">
+        <el-form-item label="类型" prop="type">
           <el-select
-            v-model="form.provider"
+            v-model="form.type"
             placeholder="选择 LLM 提供商"
             style="width: 100%"
           >
@@ -122,6 +167,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import type { FormRules } from 'element-plus'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import HifyTable from '@/components/HifyTable.vue'
@@ -131,70 +178,97 @@ import { confirmDelete } from '@/composables/useConfirm'
 import { useViewport } from '@/composables/useViewport'
 import { notifySuccess } from '@/utils/notify'
 import {
-  listProviderPage,
+  getProviderList,
   createProvider,
   updateProvider,
   deleteProvider,
+  testConnection,
   type ProviderUpsert,
 } from '@/api/provider'
 import type { ProviderConfig } from '@/types'
 
-type ProviderType = ProviderConfig['provider']
-
-interface ProviderForm extends ProviderUpsert {
-  id?: number
-}
-
 // ============ 表格列配置 ============
-// 窄屏（<1200px）下隐藏 Base URL 与 创建时间，只保留关键信息
 const { isNarrow } = useViewport(1200)
 
 const columns = computed<HifyTableColumn<ProviderConfig>[]>(() => {
   const list: HifyTableColumn<ProviderConfig>[] = [
-    { label: '名称', prop: 'name', minWidth: 180 },
-    { label: '类型', slot: 'provider', width: 120 },
+    { label: '名称', prop: 'name', minWidth: 160 },
+    { label: '类型', slot: 'type', width: 100 },
   ]
   if (!isNarrow.value) {
-    list.push({ label: 'Base URL', slot: 'baseUrl', minWidth: 260 })
+    list.push({ label: 'Base URL', slot: 'baseUrl', minWidth: 240 })
   }
-  list.push({ label: '状态', slot: 'enabled', width: 90, align: 'center' })
+  list.push(
+    { label: '状态', slot: 'enabled', width: 80, align: 'center' },
+    { label: '健康状态', slot: 'health', width: 160, align: 'center' },
+    { label: '模型数', slot: 'models', width: 90, align: 'center' },
+  )
   if (!isNarrow.value) {
-    list.push({ label: '创建时间', prop: 'createdAt', width: 180 })
+    list.push({ label: '创建时间', prop: 'createdAt', width: 170 })
   }
-  list.push({ label: '操作', slot: 'actions', width: 130, align: 'right', fixed: 'right' })
+  list.push({ label: '操作', slot: 'actions', width: 170, align: 'right', fixed: 'right' })
   return list
 })
 
 // ============ 类型展示映射 ============
 const providerOptions = [
-  { value: 'openai' as const, label: 'OpenAI' },
-  { value: 'claude' as const, label: 'Claude' },
-  { value: 'gemini' as const, label: 'Gemini' },
-  { value: 'ollama' as const, label: 'Ollama' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Claude' },
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'openai_compatible', label: 'OpenAI Compatible' },
 ]
 
-const providerLabel = (p: ProviderType): string =>
+const providerLabel = (p: string): string =>
   providerOptions.find((o) => o.value === p)?.label ?? p
 
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
-const providerTagType = (p: ProviderType): TagType => {
-  const map: Record<ProviderType, TagType> = {
+const providerTagType = (p: string): TagType => {
+  const map: Record<string, TagType> = {
     openai: 'success',
-    claude: 'warning',
+    anthropic: 'warning',
     gemini: 'primary',
     ollama: 'info',
+    openai_compatible: 'primary',
   }
-  return map[p]
+  return map[p] ?? 'info'
+}
+
+// ============ 健康状态映射 ============
+const healthLabel = (s: string): string => {
+  const map: Record<string, string> = {
+    UP: '正常',
+    DOWN: '异常',
+    DEGRADED: '降级',
+    UNKNOWN: '未知',
+  }
+  return map[s] ?? s
+}
+
+const healthTagType = (s: string): TagType => {
+  const map: Record<string, TagType> = {
+    UP: 'success',
+    DOWN: 'danger',
+    DEGRADED: 'warning',
+    UNKNOWN: 'info',
+  }
+  return map[s] ?? 'info'
 }
 
 // ============ 表单 ============
+interface ProviderForm {
+  id?: number
+  name: string
+  type: string
+  apiKey: string
+  baseUrl: string
+}
+
 const defaultForm: ProviderForm = {
   name: '',
-  provider: 'openai',
-  baseUrl: '',
+  type: 'openai',
   apiKey: '',
-  modelId: '',
-  enabled: true,
+  baseUrl: '',
 }
 
 const rules: FormRules = {
@@ -202,17 +276,16 @@ const rules: FormRules = {
     { required: true, message: '请输入名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度 2-50 个字符', trigger: 'blur' },
   ],
-  provider: [{ required: true, message: '请选择提供商类型', trigger: 'change' }],
+  type: [{ required: true, message: '请选择提供商类型', trigger: 'change' }],
   apiKey: [
     {
-      validator: (rule, value, callback) => {
-        const provider = (rule as { fullField?: string }).fullField
-        // Ollama 允许空
-        if (!value && provider !== 'ollama') {
-          callback(new Error('请输入 API Key'))
-        } else {
+      validator: (_rule, value, callback) => {
+        // Ollama 允许空 apiKey
+        if (!value && dialogRef.value) {
           callback()
+          return
         }
+        callback()
       },
       trigger: 'blur',
     },
@@ -242,52 +315,50 @@ const dialogRef = ref<DialogExposed>()
 const dialogVisible = ref(false)
 const apiKeyVisible = ref(false)
 
-// 弹窗关闭时把 API Key 显示开关复位，下次打开默认隐藏
 watch(dialogVisible, (visible) => {
   if (!visible) apiKeyVisible.value = false
 })
 
 function openCreate() {
   apiKeyVisible.value = false
-  dialogRef.value?.open()
+  if (!dialogRef.value) {
+    console.error('dialogRef 未绑定，请检查 HifyFormDialog 是否正确渲染')
+    return
+  }
+  dialogRef.value.open()
 }
 
 function openEdit(row: ProviderConfig) {
   apiKeyVisible.value = false
-  // 编辑时不回填 apiKey（脱敏后回填会让用户误以为正确）
   dialogRef.value?.open({
     id: row.id,
     name: row.name,
-    provider: row.provider,
+    type: row.type,
     baseUrl: row.baseUrl,
     apiKey: '',
-    modelId: row.modelId,
-    enabled: row.enabled,
   })
 }
 
 async function handleSubmit(payload: ProviderForm, mode: 'create' | 'edit') {
+  const upsert: ProviderUpsert = {
+    name: payload.name,
+    type: payload.type,
+    baseUrl: payload.baseUrl,
+    authConfig: payload.apiKey ? { apiKey: payload.apiKey } : undefined,
+    enabled: 1,
+  }
+
   if (mode === 'create') {
-    await createProvider(toUpsert(payload))
+    await createProvider(upsert)
     notifySuccess('提供商创建成功')
   } else if (payload.id != null) {
-    await updateProvider(payload.id, toUpsert(payload))
+    await updateProvider(payload.id, upsert)
     notifySuccess('提供商已更新')
   }
   tableRef.value?.refresh()
 }
 
-function toUpsert(form: ProviderForm): ProviderUpsert {
-  return {
-    name: form.name,
-    provider: form.provider,
-    baseUrl: form.baseUrl,
-    apiKey: form.apiKey,
-    modelId: form.modelId,
-    enabled: form.enabled,
-  }
-}
-
+// ============ 删除 ============
 async function onDelete(row: ProviderConfig) {
   await confirmDelete(
     {
@@ -298,6 +369,24 @@ async function onDelete(row: ProviderConfig) {
   )
   tableRef.value?.refresh()
 }
+
+// ============ 连通性测试 ============
+async function onTestConnection(row: ProviderConfig) {
+  try {
+    const result = await testConnection(row.id)
+    if (result.success) {
+      ElMessage.success(
+        `连通性测试通过：延迟 ${result.latencyMs}ms，可用模型 ${result.modelCount ?? 0} 个`,
+      )
+    } else {
+      ElMessage.warning(`连通性测试失败：${result.errorMessage ?? '未知错误'}`)
+    }
+  } catch {
+    // 错误已由全局拦截器 toast
+  } finally {
+    tableRef.value?.refresh()
+  }
+}
 </script>
 
 <style scoped>
@@ -307,13 +396,11 @@ async function onDelete(row: ProviderConfig) {
   word-break: break-all;
 }
 
-/* 操作列两个按钮间距 8px */
 :deep(.el-table .el-button + .el-button) {
   margin-left: var(--space-2);
 }
 
-/* 状态列 tag 颜色显式锁定，跟全局 info/success token 解耦
-   启用 = 中性绿；禁用 = 中性灰；任何情况都不出现 danger 红 */
+/* 状态列 tag */
 :deep(.status-tag.is-enabled) {
   --el-tag-bg-color: var(--mint-50);
   --el-tag-border-color: var(--mint-100);
@@ -325,7 +412,52 @@ async function onDelete(row: ProviderConfig) {
   --el-tag-text-color: var(--text-tertiary);
 }
 
-/* API Key 输入框右侧"显示 / 隐藏"切换按钮 */
+/* 健康状态列 */
+.health-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+}
+.latency-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* 模型数弹窗 */
+.model-count-link {
+  font-size: var(--font-size-base);
+}
+.model-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.model-popover-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.model-popover-item:last-child {
+  border-bottom: none;
+}
+.model-name {
+  font-weight: var(--weight-medium);
+  flex: 1;
+}
+.model-id {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+.model-status-tag {
+  flex-shrink: 0;
+}
+
+/* API Key 切换 */
 .apikey-toggle {
   height: 22px;
   padding: 0 var(--space-2);
@@ -335,5 +467,12 @@ async function onDelete(row: ProviderConfig) {
 .apikey-toggle:hover {
   color: var(--brand-600);
   background: transparent;
+}
+
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+.text-mono {
+  font-family: var(--font-mono);
 }
 </style>

@@ -25,8 +25,12 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -101,15 +105,15 @@ public class ProviderServiceImpl implements ProviderService {
     }
 
     @Override
-    @Cacheable(cacheNames = "provider-cache", key = "'list:' + (#type ?: 'all') + ':' + (#enabled ?: 'all')")
     public List<ProviderResp> list(String type, Integer enabled) {
         LambdaQueryWrapper<Provider> wrapper = buildQueryWrapper(type, enabled);
         List<Provider> providers = providerMapper.selectList(wrapper);
-        return providers.stream().map(this::toResp).toList();
+        List<ProviderResp> list = providers.stream().map(this::toResp).toList();
+        batchEnrich(list);
+        return list;
     }
 
     @Override
-    @Cacheable(cacheNames = "provider-cache", key = "'page:' + #page + ':' + #size + ':' + (#type ?: 'all') + ':' + (#enabled ?: 'all')")
     public PageResult<ProviderResp> page(int page, int size, String type, Integer enabled) {
         LambdaQueryWrapper<Provider> wrapper = buildQueryWrapper(type, enabled);
         Page<Provider> p = new Page<>(page, size);
@@ -117,6 +121,7 @@ public class ProviderServiceImpl implements ProviderService {
         List<ProviderResp> list = result.getRecords().stream()
                 .map(this::toResp)
                 .toList();
+        batchEnrich(list);
         return PageResult.ok(list, result.getTotal(), page, size);
     }
 
@@ -178,6 +183,38 @@ public class ProviderServiceImpl implements ProviderService {
         );
         if (health != null) {
             resp.setHealth(toHealthBrief(health));
+        }
+    }
+
+    /** 列表/分页场景的批量富化：一次查询加载所有 provider 的 health 和 model 数据。 */
+    private void batchEnrich(List<ProviderResp> list) {
+        if (list.isEmpty()) return;
+
+        List<Long> ids = list.stream().map(ProviderResp::getId).toList();
+
+        // 批量查询健康状态
+        List<ProviderHealth> healthList = providerHealthMapper.selectList(
+                new LambdaQueryWrapper<ProviderHealth>().in(ProviderHealth::getProviderId, ids));
+        Map<Long, ProviderHealth> healthMap = healthList.stream()
+                .collect(Collectors.toMap(ProviderHealth::getProviderId, Function.identity()));
+
+        // 批量查询模型配置
+        List<ModelConfig> configs = modelConfigMapper.selectList(
+                new LambdaQueryWrapper<ModelConfig>().in(ModelConfig::getProviderId, ids));
+        Map<Long, List<ModelConfig>> configMap = configs.stream()
+                .collect(Collectors.groupingBy(ModelConfig::getProviderId));
+
+        for (ProviderResp resp : list) {
+            // 健康状态
+            ProviderHealth health = healthMap.get(resp.getId());
+            if (health != null) {
+                resp.setHealth(toHealthBrief(health));
+            }
+
+            // 模型列表 + 启用的模型数
+            List<ModelConfig> models = configMap.getOrDefault(resp.getId(), Collections.emptyList());
+            resp.setModelConfigs(models.stream().map(this::toModelBrief).toList());
+            resp.setModelCount((int) models.stream().filter(m -> m.getEnabled() != null && m.getEnabled() == 1).count());
         }
     }
 

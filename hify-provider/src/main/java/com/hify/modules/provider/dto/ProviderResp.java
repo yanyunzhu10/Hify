@@ -18,9 +18,12 @@ public class ProviderResp {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    /** 关联的模型配置列表（仅详情接口填充） */
+    /** 关联的模型配置列表 */
     private List<ModelConfigBrief> modelConfigs;
 
-    /** 健康状态（仅详情接口填充，可能为 null 若从未探测） */
+    /** 已启用的模型数量 */
+    private int modelCount;
+
+    /** 健康状态（可能为 null 若从未探测） */
     private ProviderHealthBrief health;
 }

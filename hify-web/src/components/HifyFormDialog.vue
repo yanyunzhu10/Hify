@@ -45,6 +45,7 @@
     @closed="handleClosed"
   >
     <el-form
+      v-if="formData"
       ref="formRef"
       :model="formData"
       :rules="rules"
@@ -53,7 +54,7 @@
       :disabled="submitting"
       @submit.prevent="handleSubmit"
     >
-      <slot :form="formData.value" :mode="mode" />
+      <slot :form="formData" :mode="mode" />
     </el-form>
 
     <template #footer>
@@ -116,7 +117,7 @@ const emit = defineEmits<{
 }>()
 
 const formRef = ref<FormInstance>()
-const formData = ref<T>({ ...(props.defaultForm as T) }) as { value: T }
+const formData = ref<any>({})
 const submitting = ref(false)
 
 const mode = computed<'create' | 'edit'>(() => {
@@ -136,10 +137,12 @@ function open(data?: Partial<T>) {
     ...(props.defaultForm as T),
     ...(data ?? {}),
   } as T
-  visible.value = true
   nextTick(() => {
-    formRef.value?.clearValidate()
-    emit('opened', mode.value, formData.value)
+    visible.value = true
+    nextTick(() => {
+      formRef.value?.clearValidate()
+      emit('opened', mode.value, formData.value)
+    })
   })
 }
 

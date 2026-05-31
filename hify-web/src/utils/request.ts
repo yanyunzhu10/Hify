@@ -12,6 +12,10 @@ instance.interceptors.response.use(
   (response) => {
     const res = response.data
     if (res.code === 200) {
+      // PageResult：保留分页元数据，映射为前端 PageResult 形态
+      if (res.total !== undefined && res.page !== undefined) {
+        return { records: res.data ?? [], total: res.total, page: res.page, size: res.size }
+      }
       return res.data
     }
     ElMessage.error(res.message || '请求失败')
