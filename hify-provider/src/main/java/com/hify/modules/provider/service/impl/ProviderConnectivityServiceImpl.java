@@ -1,12 +1,10 @@
 package com.hify.modules.provider.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hify.common.exception.BizException;
-import com.hify.common.exception.ErrorCode;
 import com.hify.common.exception.LlmApiException;
 import com.hify.common.http.LlmHttpClient;
+import com.hify.modules.provider.adapter.ProviderAdapter;
+import com.hify.modules.provider.adapter.ProviderAdapterFactory;
 import com.hify.modules.provider.dto.ConnectionTestResult;
 import com.hify.modules.provider.entity.Provider;
 import com.hify.modules.provider.entity.ProviderHealth;
@@ -18,7 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -28,16 +25,15 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
 
     private final LlmHttpClient llmHttpClient;
     private final ProviderHealthMapper providerHealthMapper;
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    private static final String ANTHROPIC_VERSION = "2023-06-01";
+    private final ProviderAdapterFactory adapterFactory;
 
     @Override
     @Transactional
     public ConnectionTestResult test(Provider provider) {
-        String type = normalizeType(provider.getType());
-        String url = buildUrl(provider.getBaseUrl(), type);
-        Map<String, String> headers = buildAuthHeaders(provider, type);
+        // 按 type 路由到对应供应商的 Adapter，由 Adapter 封装 URL / 认证头 / 响应解析差异
+        ProviderAdapter adapter = adapterFactory.get(provider.getType());
+        String url = adapter.buildUrl(provider.getBaseUrl());
+        Map<String, String> headers = adapter.buildAuthHeaders(provider);
 
         long start = System.currentTimeMillis();
         ConnectionTestResult result;
@@ -45,9 +41,9 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
         try {
             String body = llmHttpClient.get(url, headers);
             long latency = System.currentTimeMillis() - start;
-            int count = parseModelCount(body, type);
+            int count = adapter.parseModelCount(body);
             log.info("连通性测试成功 provider={} type={} latencyMs={} modelCount={}",
-                    provider.getName(), type, latency, count);
+                    provider.getName(), provider.getType(), latency, count);
             result = ConnectionTestResult.ok(latency, count);
 
             // 保存健康状态：成功
@@ -55,7 +51,7 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
         } catch (LlmApiException e) {
             long latency = System.currentTimeMillis() - start;
             log.warn("连通性测试失败 provider={} type={} latencyMs={} error={}",
-                    provider.getName(), type, latency, e.getMessage());
+                    provider.getName(), provider.getType(), latency, e.getMessage());
             result = ConnectionTestResult.fail(latency, e.getMessage());
 
             // 保存健康状态：失败
@@ -63,7 +59,7 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
         } catch (Exception e) {
             long latency = System.currentTimeMillis() - start;
             log.warn("连通性测试异常 provider={} type={} latencyMs={} error={}",
-                    provider.getName(), type, latency, e.getMessage());
+                    provider.getName(), provider.getType(), latency, e.getMessage());
             result = ConnectionTestResult.fail(latency, e.getMessage());
 
             // 保存健康状态：异常
@@ -127,74 +123,5 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
 
         log.debug("健康状态已保存 providerId={} status={} latencyMs={} failCount={}",
                 providerId, status, latencyMs, health.getFailCount());
-    }
-
-    // ============================================================
-    // URL 构建
-    // ============================================================
-
-    private String buildUrl(String baseUrl, String type) {
-        String base = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        return switch (type) {
-            case "openai", "openai_compatible" -> base + "/v1/models";
-            case "anthropic" -> base + "/v1/models";
-            case "ollama" -> base + "/api/tags";
-            default -> throw new BizException(ErrorCode.PARAM_ERROR, "不支持的供应商类型: " + type);
-        };
-    }
-
-    // ============================================================
-    // 认证头构建
-    // ============================================================
-
-    private Map<String, String> buildAuthHeaders(Provider provider, String type) {
-        Map<String, String> headers = new HashMap<>();
-
-        if ("ollama".equals(type)) {
-            return headers; // 本地 Ollama 无需认证
-        }
-
-        String apiKey = extractApiKey(provider);
-        if ("anthropic".equals(type)) {
-            headers.put("x-api-key", apiKey);
-            headers.put("anthropic-version", ANTHROPIC_VERSION);
-        } else {
-            // openai / openai_compatible / gemini（Gemini 也兼容 Bearer Token）
-            headers.put("Authorization", "Bearer " + apiKey);
-        }
-
-        return headers;
-    }
-
-    private String extractApiKey(Provider provider) {
-        Map<String, Object> auth = provider.getAuthConfig();
-        if (auth == null || !auth.containsKey("apiKey")) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "authConfig 中缺少 apiKey");
-        }
-        Object key = auth.get("apiKey");
-        if (key == null || key.toString().isBlank()) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "apiKey 不能为空");
-        }
-        return key.toString();
-    }
-
-    // ============================================================
-    // 响应解析
-    // ============================================================
-
-    private int parseModelCount(String body, String type) {
-        try {
-            JsonNode root = OBJECT_MAPPER.readTree(body);
-            String field = "ollama".equals(type) ? "models" : "data";
-            JsonNode arr = root.get(field);
-            return arr != null && arr.isArray() ? arr.size() : 0;
-        } catch (Exception e) {
-            log.debug("解析模型数量失败 type={}", type, e);
-            return 0;
-        }
-    }
-
-    private String normalizeType(String type) {
-        return type != null ? type.toLowerCase() : "";
     }
 }
