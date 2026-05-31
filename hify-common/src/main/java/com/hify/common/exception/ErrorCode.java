@@ -21,7 +21,10 @@ public enum ErrorCode {
     LLM_CALL_FAILED(502, "LLM 调用失败"),
     LLM_TIMEOUT(504, "LLM 调用超时"),
     LLM_AUTH_FAILED(401, "LLM 认证失败"),
-    LLM_RATE_LIMITED(429, "LLM 限流");
+    LLM_RATE_LIMITED(429, "LLM 限流"),
+
+    // 业务错误
+    PROVIDER_NAME_EXISTS(409, "供应商名称已存在");
 
     private final int code;
     private final String message;
