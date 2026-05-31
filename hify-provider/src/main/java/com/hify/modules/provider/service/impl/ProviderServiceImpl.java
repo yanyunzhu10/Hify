@@ -1,8 +1,10 @@
 package com.hify.modules.provider.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
+import com.hify.common.web.PageResult;
 import com.hify.modules.provider.dto.ModelConfigBrief;
 import com.hify.modules.provider.dto.ProviderCreateReq;
 import com.hify.modules.provider.dto.ProviderHealthBrief;
@@ -101,6 +103,28 @@ public class ProviderServiceImpl implements ProviderService {
     @Override
     @Cacheable(cacheNames = "provider-cache", key = "'list:' + (#type ?: 'all') + ':' + (#enabled ?: 'all')")
     public List<ProviderResp> list(String type, Integer enabled) {
+        LambdaQueryWrapper<Provider> wrapper = buildQueryWrapper(type, enabled);
+        List<Provider> providers = providerMapper.selectList(wrapper);
+        return providers.stream().map(this::toResp).toList();
+    }
+
+    @Override
+    @Cacheable(cacheNames = "provider-cache", key = "'page:' + #page + ':' + #size + ':' + (#type ?: 'all') + ':' + (#enabled ?: 'all')")
+    public PageResult<ProviderResp> page(int page, int size, String type, Integer enabled) {
+        LambdaQueryWrapper<Provider> wrapper = buildQueryWrapper(type, enabled);
+        Page<Provider> p = new Page<>(page, size);
+        Page<Provider> result = providerMapper.selectPage(p, wrapper);
+        List<ProviderResp> list = result.getRecords().stream()
+                .map(this::toResp)
+                .toList();
+        return PageResult.ok(list, result.getTotal(), page, size);
+    }
+
+    // ============================================================
+    // 内部方法
+    // ============================================================
+
+    private LambdaQueryWrapper<Provider> buildQueryWrapper(String type, Integer enabled) {
         LambdaQueryWrapper<Provider> wrapper = new LambdaQueryWrapper<>();
         if (type != null && !type.isBlank()) {
             wrapper.eq(Provider::getType, type);
@@ -109,14 +133,8 @@ public class ProviderServiceImpl implements ProviderService {
             wrapper.eq(Provider::getEnabled, enabled);
         }
         wrapper.orderByDesc(Provider::getCreatedAt);
-
-        List<Provider> providers = providerMapper.selectList(wrapper);
-        return providers.stream().map(this::toResp).toList();
+        return wrapper;
     }
-
-    // ============================================================
-    // 内部方法
-    // ============================================================
 
     /**
      * 校验名称唯一性。
