@@ -39,6 +39,9 @@ public class LlmHttpClient {
     private final RestTemplate restTemplate;
     private final OkHttpClient okHttpClient;
 
+    /** 短超时 GET 专用（连通性测试）：connect=5s, read=10s */
+    private final OkHttpClient shortTimeoutClient;
+
     public LlmHttpClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
@@ -49,6 +52,12 @@ public class LlmHttpClient {
         this.okHttpClient = new OkHttpClient.Builder()
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(0, TimeUnit.SECONDS)
+                .build();
+
+        // 短超时客户端：连通性测试等非流式 GET 场景
+        this.shortTimeoutClient = new OkHttpClient.Builder()
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -127,6 +136,40 @@ public class LlmHttpClient {
                     "LLM 流式调用失败: " + e.getMessage(), e);
         } finally {
             log.info("LLM STREAM url={} status={} costMs={}",
+                    url, statusCode, System.currentTimeMillis() - start);
+        }
+    }
+
+    /** 非流式 GET（连通性测试），使用短超时客户端。 */
+    public String get(String url, Map<String, String> headers) {
+        long start = System.currentTimeMillis();
+        int statusCode = -1;
+        try {
+            Request.Builder builder = new Request.Builder().url(url).get();
+            if (headers != null) {
+                headers.forEach(builder::addHeader);
+            }
+
+            try (Response response = shortTimeoutClient.newCall(builder.build()).execute()) {
+                statusCode = response.code();
+                if (!response.isSuccessful()) {
+                    ResponseBody respBody = response.body();
+                    String errorBody = respBody == null ? "" : respBody.string();
+                    throw mapHttpError(statusCode, errorBody, null);
+                }
+                ResponseBody respBody = response.body();
+                return respBody != null ? respBody.string() : "";
+            }
+        } catch (LlmApiException e) {
+            throw e;
+        } catch (SocketTimeoutException | ConnectException e) {
+            throw new LlmApiException(LlmApiException.Type.TIMEOUT, statusCode,
+                    "LLM GET 请求超时: " + url, e);
+        } catch (Exception e) {
+            throw new LlmApiException(LlmApiException.Type.OTHER, statusCode,
+                    "LLM GET 调用失败: " + e.getMessage(), e);
+        } finally {
+            log.info("LLM GET url={} status={} costMs={}",
                     url, statusCode, System.currentTimeMillis() - start);
         }
     }
