@@ -9,3 +9,5 @@ docker run -d --name redis -p 6379:6379 redis:7
 
 
 cd hify-web && npm run dev  启动前端
+
+brew services restart postgresql  启动

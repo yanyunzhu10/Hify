@@ -24,7 +24,9 @@ public enum ErrorCode {
     LLM_RATE_LIMITED(429, "LLM 限流"),
 
     // 业务错误
-    PROVIDER_NAME_EXISTS(409, "供应商名称已存在");
+    PROVIDER_NAME_EXISTS(409, "供应商名称已存在"),
+    AGENT_NAME_EXISTS(409, "Agent 名称已存在"),
+    MODEL_CONFIG_NOT_FOUND(404, "模型配置不存在或未启用");
 
     private final int code;
     private final String message;

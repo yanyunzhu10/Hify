@@ -125,6 +125,18 @@ public class ProviderServiceImpl implements ProviderService {
         return PageResult.ok(list, result.getTotal(), page, size);
     }
 
+    @Override
+    public boolean existsEnabledModelConfig(Long modelConfigId) {
+        if (modelConfigId == null) {
+            return false;
+        }
+        return modelConfigMapper.selectCount(
+                new LambdaQueryWrapper<ModelConfig>()
+                        .eq(ModelConfig::getId, modelConfigId)
+                        .eq(ModelConfig::getEnabled, 1)
+        ) > 0;
+    }
+
     // ============================================================
     // 内部方法
     // ============================================================

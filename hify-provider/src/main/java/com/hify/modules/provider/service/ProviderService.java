@@ -26,4 +26,13 @@ public interface ProviderService {
 
     /** 分页查询，支持按 type 和 enabled 筛选。 */
     PageResult<ProviderResp> page(int page, int size, String type, Integer enabled);
+
+    /**
+     * 校验模型配置是否存在且已启用。供 agent 等模块绑定模型前做跨模块校验，
+     * 避免直接访问 model_config 的数据访问层。
+     *
+     * @param modelConfigId 模型配置 id（t_model_config.id）
+     * @return true 表示存在且 enabled=1
+     */
+    boolean existsEnabledModelConfig(Long modelConfigId);
 }
