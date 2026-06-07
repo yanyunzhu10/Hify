@@ -1,6 +1,8 @@
 package com.hify.modules.chat.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
 import com.hify.common.exception.LlmApiException;
@@ -27,6 +29,7 @@ import com.hify.modules.provider.mapper.ModelConfigMapper;
 import com.hify.modules.provider.mapper.ProviderMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -36,19 +39,24 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 对话引擎（有状态）。会话显式创建，消息按 sessionId 关联。
  * <p>
  * 事务边界：消息写入委托 {@link ChatMessageWriteService}（独立 Bean 秒级提交），
- * streamChat 编排方法无事务，LLM 流式 IO 不占 DB 连接。
+ * {@code sendMessage} 编排方法无事务，LLM 流式 IO 不占 DB 连接。
  * </p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
+
+    /** SSE 总超时：单次对话最长 120 秒内必须完成 LLM 输出 */
+    private static final long SSE_TIMEOUT_MS = 120_000L;
 
     private final LlmHttpClient llmHttpClient;
     private final AgentMapper agentMapper;
@@ -59,6 +67,11 @@ public class ChatServiceImpl implements ChatService {
     private final ChatMessageWriteService messageWriteService;
     private final ChatContextCache contextCache;
     private final ProviderAdapterFactory adapterFactory;
+    private final ObjectMapper objectMapper;
+
+    /** 流式 SSE 专用线程池（AbortPolicy：满载抛 RejectedExecutionException，上层转 503）。 */
+    @Qualifier("llmStreamExecutor")
+    private final ThreadPoolExecutor llmStreamExecutor;
 
     // ════════════════════════════════════════════════════════════════
     // 会话 CRUD
@@ -124,11 +137,39 @@ public class ChatServiceImpl implements ChatService {
     // ════════════════════════════════════════════════════════════════
 
     @Override
-    public void streamChat(Long sessionId, String content, SseEmitter emitter) {
+    public SseEmitter sendMessage(Long sessionId, String content) {
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        // 停止标志：被 onTimeout / 客户端断开 / 连接错误置位，作为 streamCancellable 的取消信号
+        AtomicBoolean stop = new AtomicBoolean(false);
+
+        // ── SSE 超时：onTimeout 回调置位停止标志，中止 LLM 读取，并完成 emitter ──
+        emitter.onTimeout(() -> {
+            log.warn("SSE 超时（{}ms），中止 LLM 调用 sessionId={}", SSE_TIMEOUT_MS, sessionId);
+            stop.set(true);
+            emitter.complete();
+        });
+        // ── 连接错误 / 客户端提前关闭：置位停止标志，让流式循环尽快退出 ──
+        emitter.onError(t -> {
+            log.debug("SSE 连接错误，中止 LLM 调用 sessionId={}", sessionId);
+            stop.set(true);
+        });
+        emitter.onCompletion(() -> stop.set(true));
+
+        // 异步执行，立即返回 emitter 释放 HTTP 线程；
+        // 线程池 AbortPolicy 满载时抛 RejectedExecutionException → 由上层转 503
+        llmStreamExecutor.execute(() -> doStream(sessionId, content, emitter, stop));
+        return emitter;
+    }
+
+    /**
+     * 流式对话实际执行体（运行在 llmStreamExecutor 线程）。无事务：消息写入全部委托
+     * {@link ChatMessageWriteService} 的独立事务方法，DB 连接不跨越 LLM 流式 IO。
+     */
+    private void doStream(Long sessionId, String content, SseEmitter emitter, AtomicBoolean stop) {
         long startMs = System.currentTimeMillis();
         String fullContent = "";
-        String finishReason = "stop";
-        AtomicBoolean clientDisconnected = new AtomicBoolean(false);
+        // 记录 send 抛出的 IOException（客户端断开）：循环结束后据此 completeWithError
+        AtomicReference<IOException> sendError = new AtomicReference<>();
 
         try {
             // ── 第一步：会话必须已存在，反查 agentId ──
@@ -155,27 +196,40 @@ public class ChatServiceImpl implements ChatService {
             chatReq.setStream(true);
             String body = adapter.buildChatRequestBody(chatReq);
 
-            // ── 第五步：流式调 LLM ──
+            // ── 第五步：流式调 LLM（stop 为取消信号，置位即中断 HTTP 读取） ──
             StringBuilder sb = new StringBuilder();
             llmHttpClient.streamCancellable(url, headers, body,
                     rawLine -> {
                         ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
-                        if (chunk == null) {
+                        if (chunk == null || chunk.getContent() == null) {
                             return;
                         }
-                        if (chunk.getContent() != null) {
-                            sb.append(chunk.getContent());
-                            sendChunk(emitter, chunk.getContent(), clientDisconnected);
-                        }
+                        sb.append(chunk.getContent());
+                        sendChunk(emitter, chunk.getContent(), stop, sendError);
                     },
-                    clientDisconnected::get
+                    stop::get
             );
             fullContent = sb.toString();
 
-            // ── 第六步：保存 assistant 回复（独立事务） ──
+            // ── 第六步（异常路径）：客户端断开（send 失败）→ 保存部分回复并 completeWithError ──
+            if (sendError.get() != null) {
+                savePartialReply(sessionId, fullContent, "error",
+                        (int) (System.currentTimeMillis() - startMs));
+                emitter.completeWithError(sendError.get());
+                return;
+            }
+
+            // ── 第七步（异常路径）：被 onTimeout 中止 → emitter 已 complete，仅保存部分回复 ──
+            if (stop.get()) {
+                savePartialReply(sessionId, fullContent, "length",
+                        (int) (System.currentTimeMillis() - startMs));
+                return;
+            }
+
+            // ── 第八步：正常结束，保存 assistant 回复（独立事务） ──
             if (!fullContent.isEmpty()) {
                 messageWriteService.saveAssistantMessage(sessionId, fullContent,
-                        countTokens(fullContent), finishReason,
+                        countTokens(fullContent), "stop",
                         (int) (System.currentTimeMillis() - startMs));
 
                 // 追加本轮对话到工作内存（滑动窗口），供下轮直接取用
@@ -186,9 +240,15 @@ public class ChatServiceImpl implements ChatService {
                         maxTurns);
             }
 
-            // ── 第七步：首次对话自动生成标题 ──
+            // ── 第九步：首次对话自动生成标题 ──
             updateSessionTitleIfFirst(session, content);
 
+            // 正常完成：发送 done 事件，前端据此移除加载态（与连接中断相区分）
+            try {
+                emitter.send(SseEmitter.event().name("done").data("{}"));
+            } catch (IOException ignore) {
+                // 客户端在收尾时已断开，无需处理
+            }
             emitter.complete();
 
         } catch (LlmApiException e) {
@@ -321,13 +381,27 @@ public class ChatServiceImpl implements ChatService {
     // 辅助
     // ════════════════════════════════════════════════════════════════
 
-    private void sendChunk(SseEmitter emitter, String content, AtomicBoolean disconnected) {
-        if (disconnected.get()) return;
+    /**
+     * 推送一个增量片段。每个片段以 JSON 字符串字面量发送（{@code data:"...\n..."}），
+     * 使内容中的换行/引号被转义，避免原始换行破坏 SSE 帧解析（Markdown 必需）。
+     * send 抛 IOException 表示客户端断开：记录异常并置位停止标志，
+     * 中止后续 LLM 读取（由 {@link #doStream} 在循环结束后据此 completeWithError）。
+     */
+    private void sendChunk(SseEmitter emitter, String content,
+                           AtomicBoolean stop, AtomicReference<IOException> sendError) {
+        if (stop.get()) {
+            return;
+        }
         try {
-            emitter.send(SseEmitter.event().data(content));
+            // JSON 编码：换行符转义为 \n（两字符），前端按 \n\n 分帧后 JSON.parse 还原
+            emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(content)));
+        } catch (JsonProcessingException e) {
+            // String 必可序列化，理论不会发生；记录后跳过该片段，不影响整体流式
+            log.warn("SSE 片段 JSON 序列化失败，已跳过", e);
         } catch (IOException e) {
-            disconnected.set(true);
-            log.debug("客户端断开连接，中止推送 sessionId");
+            sendError.set(e);
+            stop.set(true);
+            log.debug("客户端断开，send 失败，中止 LLM 调用");
         }
     }
 

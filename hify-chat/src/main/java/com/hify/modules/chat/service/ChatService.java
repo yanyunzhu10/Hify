@@ -29,12 +29,22 @@ public interface ChatService {
     void deleteSession(Long sessionId);
 
     /**
-     * 流式对话：异步执行 LLM 调用，通过 SseEmitter 逐字推送。
-     * 会话必须已存在（由 {@code POST /sessions} 显式创建）。
+     * 发送消息（流式 SSE）。创建并返回 {@link SseEmitter}，在 {@code llmStreamExecutor}
+     * 上异步执行 LLM 调用并逐字推送。会话必须已存在（由 {@code POST /sessions} 显式创建）。
+     * <p>
+     * 异常处理：
+     * <ul>
+     *   <li>LLM/SSE 超时 → emitter {@code onTimeout} 回调置位停止标志，中止 LLM 读取；</li>
+     *   <li>客户端断开（{@code emitter.send} 抛 IOException）→ 置位停止标志中止 LLM 调用，
+     *       并对 emitter 调 {@code completeWithError}；</li>
+     *   <li>LLM 异常 / 其他异常 → 保存已生成的部分回复后 {@code completeWithError}。</li>
+     * </ul>
+     * 本方法返回 SseEmitter，<b>不可加 {@code @Transactional}</b>；消息写入委托
+     * {@link ChatMessageWriteService} 的独立事务方法，秒级提交，不让 DB 连接跨越 LLM IO。
      *
-     * @param sessionId 会话 id（路径参数）
+     * @param sessionId 会话 id（必填，由路径参数定位）
      * @param content   用户消息内容
-     * @param emitter   SSE 发射器
+     * @return SSE 发射器
      */
-    void streamChat(Long sessionId, String content, SseEmitter emitter);
+    SseEmitter sendMessage(Long sessionId, String content);
 }
