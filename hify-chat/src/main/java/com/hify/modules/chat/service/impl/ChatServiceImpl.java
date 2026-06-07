@@ -175,8 +175,9 @@ public class ChatServiceImpl implements ChatService {
             // ── 第一步：会话必须已存在，反查 agentId ──
             ChatSession session = requireSession(sessionId);
 
-            // ── 第二步：保存用户消息（独立事务） ──
+            // ── 第二步：保存用户消息（独立事务），并据首条消息生成会话标题 ──
             messageWriteService.saveUserMessage(sessionId, content);
+            updateSessionTitleIfFirst(session, content);
 
             // ── 第三步：读配置（Agent → Model → Provider） ──
             Agent agent = requireAgent(session.getAgentId());
@@ -239,9 +240,6 @@ public class ChatServiceImpl implements ChatService {
                         message("assistant", fullContent),
                         maxTurns);
             }
-
-            // ── 第九步：首次对话自动生成标题 ──
-            updateSessionTitleIfFirst(session, content);
 
             // 正常完成：发送 done 事件，前端据此移除加载态（与连接中断相区分）
             try {
@@ -361,20 +359,27 @@ public class ChatServiceImpl implements ChatService {
         return m;
     }
 
+    /**
+     * 若会话仍是默认标题，用首条用户消息的前 20 字生成标题。
+     * <p>
+     * 仅凭「标题仍为默认值」即可判定首轮——后续轮次标题已非默认，自然跳过；
+     * 无需再查消息数（此前在 assistant 落库后才判断，count 已为 2，导致永远不改）。
+     * </p>
+     */
     private void updateSessionTitleIfFirst(ChatSession session, String firstContent) {
         if (!"新对话".equals(session.getTitle())) {
             return;
         }
-        long count = chatMessageMapper.selectCount(
-                new LambdaQueryWrapper<ChatMessage>()
-                        .eq(ChatMessage::getSessionId, session.getId()));
-        // count==1 即只有刚插的 user 消息 → 首次对话
-        if (count <= 1) {
-            String title = firstContent.length() > 20
-                    ? firstContent.substring(0, 20) : firstContent;
-            session.setTitle(title);
-            chatSessionMapper.updateById(session);
+        String title = firstContent == null ? "" : firstContent.strip().replaceAll("\\s+", " ");
+        if (title.isEmpty()) {
+            return;
         }
+        if (title.length() > 20) {
+            title = title.substring(0, 20);
+        }
+        session.setTitle(title);
+        chatSessionMapper.updateById(session);
+        log.info("会话标题自动生成 id={} title={}", session.getId(), title);
     }
 
     // ════════════════════════════════════════════════════════════════
