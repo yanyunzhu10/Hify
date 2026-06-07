@@ -71,6 +71,7 @@ public class AgentServiceImpl implements AgentService {
 
         AgentResp resp = AgentResp.from(agent, toolBriefs);
         resp.setToolCount(toolBriefs.size());
+        enrichModelName(resp);
         return resp;
     }
 
@@ -100,6 +101,7 @@ public class AgentServiceImpl implements AgentService {
         List<AgentToolBrief> tools = listToolBriefs(id);
         AgentResp resp = AgentResp.from(agent, tools);
         resp.setToolCount(tools.size());
+        enrichModelName(resp);
         return resp;
     }
 
@@ -135,6 +137,7 @@ public class AgentServiceImpl implements AgentService {
         List<AgentToolBrief> tools = listToolBriefs(id);
         AgentResp resp = AgentResp.from(agent, tools);
         resp.setToolCount(tools.size());
+        enrichModelName(resp);
         return resp;
     }
 
@@ -154,6 +157,7 @@ public class AgentServiceImpl implements AgentService {
 
         List<AgentResp> list = result.getRecords().stream().map(AgentResp::from).toList();
         fillToolCount(list);
+        fillModelNames(list);
 
         return PageResult.ok(list, result.getTotal(), req.getPage(), req.getSize());
     }
@@ -212,6 +216,18 @@ public class AgentServiceImpl implements AgentService {
         List<AgentTool> tools = agentToolMapper.selectList(
                 new LambdaQueryWrapper<AgentTool>().eq(AgentTool::getAgentId, agentId));
         return tools.stream().map(t -> AgentToolBrief.of(t.getToolId(), null)).toList();
+    }
+
+    /** 单条 AgentResp 富化 modelName（跨模块查 provider）。 */
+    private void enrichModelName(AgentResp resp) {
+        resp.setModelName(providerService.getModelName(resp.getModelConfigId()));
+    }
+
+    /** 列表场景批量富化 modelName。 */
+    private void fillModelNames(List<AgentResp> list) {
+        for (AgentResp resp : list) {
+            resp.setModelName(providerService.getModelName(resp.getModelConfigId()));
+        }
     }
 
     /** 列表场景批量填充工具数量，一次 IN 查询避免 N+1。 */

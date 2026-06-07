@@ -223,7 +223,7 @@ const { isNarrow } = useViewport(1200)
 const columns = computed<HifyTableColumn<AgentConfig>[]>(() => {
   const list: HifyTableColumn<AgentConfig>[] = [
     { label: '名称', slot: 'name', minWidth: 180 },
-    { label: '模型', slot: 'modelName', minWidth: 140 },
+    { label: '关联模型', slot: 'modelName', minWidth: 140 },
     { label: '工具', slot: 'toolCount', width: 70, align: 'center' },
     { label: 'Temperature', slot: 'temperature', width: 120, align: 'center' },
     { label: '状态', slot: 'enabled', width: 80, align: 'center' },

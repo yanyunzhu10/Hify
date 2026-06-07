@@ -1,5 +1,8 @@
 package com.hify.modules.provider.adapter;
 
+import com.hify.modules.provider.dto.ChatRequest;
+import com.hify.modules.provider.dto.ChatResponse;
+import com.hify.modules.provider.dto.ChatStreamChunk;
 import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
 
@@ -9,55 +12,69 @@ import java.util.Map;
 /**
  * 供应商适配器：封装单个 LLM 供应商的 API 差异。
  * <p>
- * 不同供应商在连通性探测端点、认证头格式、响应结构上各不相同，
- * 每新增一个供应商即新增一个本接口的实现，由 {@link ProviderAdapterFactory}
- * 按 {@link #supports(String)} 路由。新增供应商无需改动已有 Adapter 或编排逻辑。
+ * 覆盖连通性探测、模型列表同步、Chat（流式/非流式）四个方向。
+ * 每新增一个供应商即新增一个实现，由 {@link ProviderAdapterFactory} 路由。
  * </p>
  *
  * @see ProviderAdapterFactory
- * @see com.hify.modules.provider.service.impl.ProviderConnectivityServiceImpl
  */
 public interface ProviderAdapter {
 
-    /**
-     * 是否支持该供应商类型。type 已由 Factory 规范化为小写。
-     *
-     * @param type 供应商类型，如 "openai" / "anthropic" / "ollama" / "gemini"
-     * @return true 表示本 Adapter 负责处理该类型
-     */
+    // ==================== 路由 ====================
+
     boolean supports(String type);
 
-    /**
-     * 构建连通性探测的完整 URL（通常是"列出模型"端点）。
-     *
-     * @param baseUrl 供应商配置的 API 基础地址（可能以 / 结尾，实现需自行规整）
-     * @return 探测请求的完整 URL
-     */
+    // ==================== 连通性探测 & 模型同步 ====================
+
     String buildUrl(String baseUrl);
 
-    /**
-     * 构建鉴权请求头。无需鉴权的供应商（如本地 Ollama）返回空 Map。
-     *
-     * @param provider 供应商配置，鉴权信息从 {@link Provider#getAuthConfig()} 提取
-     * @return 请求头键值对，不会为 null
-     */
     Map<String, String> buildAuthHeaders(Provider provider);
 
-    /**
-     * 从探测响应体解析可用模型数量。解析失败应返回 0 而非抛异常
-     * （连通性已经成功，模型数仅为附加信息）。
-     *
-     * @param responseBody 探测端点返回的响应体
-     * @return 可用模型数量，解析失败返回 0
-     */
     int parseModelCount(String responseBody);
 
-    /**
-     * 从探测响应体解析模型列表（modelId + 展示名），供同步到 t_model_config。
-     * 解析失败返回空列表（连通性已成功，同步为附加能力）。
-     *
-     * @param responseBody 探测端点返回的响应体
-     * @return 模型列表，解析失败返回空列表
-     */
     List<ModelInfo> parseModels(String responseBody);
+
+    // ==================== Chat ====================
+
+    /**
+     * 构建 Chat 请求的完整 URL。
+     *
+     * @param baseUrl 供应商 API 基础地址
+     * @param model   模型标识（如 gpt-4o），Gemini 等需嵌入 URL 的适配器使用
+     * @return Chat 端点的完整 URL
+     */
+    String buildChatUrl(String baseUrl, String model);
+
+    /**
+     * 将通用 {@link ChatRequest} 转换为供应商原生 JSON 请求体。
+     *
+     * @param request 通用 Chat 请求（OpenAI 兼容消息格式）
+     * @return 供应商原生 JSON 字符串
+     */
+    String buildChatRequestBody(ChatRequest request);
+
+    /**
+     * 解析非流式 Chat 的完整响应体，转为统一 {@link ChatResponse}。
+     *
+     * @param responseBody 供应商返回的完整 JSON
+     * @return 统一响应
+     */
+    ChatResponse parseChatResponse(String responseBody);
+
+    /**
+     * 解析流式 Chat 的一条原始行，转为统一 {@link ChatStreamChunk}。
+     * <p>
+     * 各行格式由供应商自行定义：
+     * <ul>
+     *   <li>OpenAI / Anthropic：合法的内容行以 {@code data: } 开头，正文为 JSON</li>
+     *   <li>Ollama：每行即一个完整 JSON，无 SSE 封装</li>
+     *   <li>Gemini（?alt=sse）：标准 SSE 行，{@code data: } 前缀</li>
+     * </ul>
+     * 返回 {@code null} 表示该行不包含内容（空行、注释、[DONE]、元数据事件等），调用方跳过。
+     * </p>
+     *
+     * @param rawLine OkHttp 流读取到的一行（不含换行符）
+     * @return 解析后的 chunk，或 null
+     */
+    ChatStreamChunk parseStreamLine(String rawLine);
 }

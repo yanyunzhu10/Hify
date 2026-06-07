@@ -35,4 +35,12 @@ public interface ProviderService {
      * @return true 表示存在且 enabled=1
      */
     boolean existsEnabledModelConfig(Long modelConfigId);
+
+    /**
+     * 查询模型配置的展示名。供 agent 等模块富化 modelName 字段。
+     *
+     * @param modelConfigId 模型配置 id
+     * @return 展示名（如 GPT-4o），不存在返回 null
+     */
+    String getModelName(Long modelConfigId);
 }

@@ -21,6 +21,7 @@ import org.springframework.web.client.RestTemplate;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.concurrent.TimeUnit;
 
@@ -126,6 +127,63 @@ public class LlmHttpClient {
                     callback.accept(line);
                 }
             }
+        } catch (LlmApiException e) {
+            throw e;
+        } catch (SocketTimeoutException | ConnectException e) {
+            throw new LlmApiException(LlmApiException.Type.TIMEOUT, statusCode,
+                    "LLM 流式请求超时: " + url, e);
+        } catch (Exception e) {
+            throw new LlmApiException(LlmApiException.Type.OTHER, statusCode,
+                    "LLM 流式调用失败: " + e.getMessage(), e);
+        } finally {
+            log.info("LLM STREAM url={} status={} costMs={}",
+                    url, statusCode, System.currentTimeMillis() - start);
+        }
+    }
+
+    /**
+     * 流式 POST（可取消版），与 {@link #stream(String, Map, String, Consumer)} 相同，
+     * 但每读取一行后检查 {@code shouldCancel}，若返回 true 则中断读取并正常返回。
+     * 适用于客户端断开时主动中止 HTTP 连接，避免 llm 线程空跑。
+     *
+     * @return true 表示正常结束，false 表示被中断（shouldCancel 返回了 true）
+     */
+    public boolean streamCancellable(String url, Map<String, String> headers, String body,
+                                      Consumer<String> callback,
+                                      BooleanSupplier shouldCancel) {
+        long start = System.currentTimeMillis();
+        int statusCode = -1;
+        try {
+            Request.Builder builder = new Request.Builder()
+                    .url(url)
+                    .post(RequestBody.create(body, JSON));
+            if (headers != null) {
+                headers.forEach(builder::addHeader);
+            }
+
+            try (Response response = okHttpClient.newCall(builder.build()).execute()) {
+                statusCode = response.code();
+                ResponseBody respBody = response.body();
+                if (!response.isSuccessful()) {
+                    String errorBody = respBody == null ? "" : respBody.string();
+                    throw mapHttpError(statusCode, errorBody, null);
+                }
+                if (respBody == null) {
+                    throw new LlmApiException(LlmApiException.Type.OTHER, statusCode,
+                            "LLM 流式响应体为空");
+                }
+                BufferedSource source = respBody.source();
+                String line;
+                while ((line = source.readUtf8Line()) != null) {
+                    if (shouldCancel.getAsBoolean()) {
+                        log.info("LLM STREAM cancelled url={} status={} costMs={}",
+                                url, statusCode, System.currentTimeMillis() - start);
+                        return false;
+                    }
+                    callback.accept(line);
+                }
+            }
+            return true;
         } catch (LlmApiException e) {
             throw e;
         } catch (SocketTimeoutException | ConnectException e) {

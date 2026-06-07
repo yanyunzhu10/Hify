@@ -137,6 +137,15 @@ public class ProviderServiceImpl implements ProviderService {
         ) > 0;
     }
 
+    @Override
+    public String getModelName(Long modelConfigId) {
+        if (modelConfigId == null) {
+            return null;
+        }
+        ModelConfig config = modelConfigMapper.selectById(modelConfigId);
+        return config != null ? config.getName() : null;
+    }
+
     // ============================================================
     // 内部方法
     // ============================================================

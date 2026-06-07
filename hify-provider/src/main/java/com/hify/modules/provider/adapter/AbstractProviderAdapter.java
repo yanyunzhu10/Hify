@@ -1,5 +1,6 @@
 package com.hify.modules.provider.adapter;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.common.exception.BizException;
@@ -14,8 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Adapter 公共逻辑：apiKey 提取、baseUrl 规整、按字段名解析模型数量。
- * 需要鉴权的供应商（OpenAI / Anthropic / Gemini）继承此类复用 apiKey 提取。
+ * Adapter 公共逻辑：apiKey 提取、baseUrl 规整、模型列表解析、Chat 请求/响应解析。
  */
 @Slf4j
 abstract class AbstractProviderAdapter implements ProviderAdapter {
@@ -40,12 +40,27 @@ abstract class AbstractProviderAdapter implements ProviderAdapter {
         return key.toString();
     }
 
-    /**
-     * 解析响应体中指定数组字段的长度。解析失败返回 0。
-     *
-     * @param responseBody 响应体
-     * @param arrayField   模型列表所在的字段名（OpenAI/Anthropic 为 "data"，Ollama 为 "models"）
-     */
+    /** 对象序列化为 JSON 字符串。 */
+    protected String toJson(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "JSON 序列化失败: " + e.getMessage());
+        }
+    }
+
+    /** 安全解析 JSON 字符串为 JsonNode，失败返回 null。 */
+    protected JsonNode safeParse(String json) {
+        try {
+            return OBJECT_MAPPER.readTree(json);
+        } catch (Exception e) {
+            log.debug("JSON 解析失败", e);
+            return null;
+        }
+    }
+
+    // ==================== 连通性 & 模型（已有） ====================
+
     protected int countArrayField(String responseBody, String arrayField) {
         try {
             JsonNode root = OBJECT_MAPPER.readTree(responseBody);
@@ -57,22 +72,6 @@ abstract class AbstractProviderAdapter implements ProviderAdapter {
         }
     }
 
-    /**
-     * 从 JSON 数组字段逐条提取模型信息。
-     * <p>
-     * 各供应商的模型列表结构：
-     * <ul>
-     *   <li>OpenAI / Anthropic：arrayField="data", idField="id", nameField 传 null → 展示名用 id</li>
-     *   <li>Ollama：arrayField="models", idField="name", nameField 传 null → 展示名用 name</li>
-     *   <li>Gemini：arrayField="models", idField="name", nameField="displayName" → 展示名取 displayName</li>
-     * </ul>
-     *
-     * @param responseBody 响应体
-     * @param arrayField   模型数组所在的 JSON 字段
-     * @param idField      每条模型的唯一标识字段（如 "id" / "name"）
-     * @param nameField    展示名字段，可为 null（此时取 idField 的值）
-     * @return 模型列表，解析失败返回空列表
-     */
     protected List<ModelInfo> extractModelList(String responseBody, String arrayField,
                                                 String idField, String nameField) {
         try {
@@ -96,5 +95,28 @@ abstract class AbstractProviderAdapter implements ProviderAdapter {
             log.debug("解析模型列表失败 arrayField={} idField={}", arrayField, idField, e);
             return Collections.emptyList();
         }
+    }
+
+    // ==================== Chat 流式行解析公共逻辑 ====================
+
+    /**
+     * 从 SSE 行提取 JSON 数据。
+     * <p>
+     * 标准 SSE 行格式为 {@code data: {...}} 或 {@code data: [DONE]}。
+     * 返回 null 表示该行应跳过（空行、注释、[DONE]）。
+     * </p>
+     */
+    protected JsonNode extractSseData(String rawLine) {
+        if (rawLine == null || rawLine.isBlank()) {
+            return null;
+        }
+        if (!rawLine.startsWith("data: ")) {
+            return null;
+        }
+        String payload = rawLine.substring(6);
+        if ("[DONE]".equals(payload)) {
+            return null;
+        }
+        return safeParse(payload);
     }
 }

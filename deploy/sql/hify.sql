@@ -84,9 +84,11 @@ START 1
 CACHE 1
 ),
                                            "session_id" int8 NOT NULL,
-                                           "role" varchar(16) COLLATE "pg_catalog"."default" NOT NULL,
+                                           "role" varchar(20) COLLATE "pg_catalog"."default" NOT NULL,
                                            "content" text COLLATE "pg_catalog"."default" NOT NULL,
                                            "tokens" int4 NOT NULL DEFAULT 0,
+                                           "finish_reason" varchar(20) COLLATE "pg_catalog"."default" DEFAULT NULL,
+                                           "latency_ms" int4 DEFAULT NULL,
                                            "created_at" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
                                            "updated_at" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
                                            "deleted" int2 NOT NULL DEFAULT 0
@@ -95,9 +97,11 @@ CACHE 1
 ALTER TABLE "public"."t_chat_message" OWNER TO "zyy";
 COMMENT ON COLUMN "public"."t_chat_message"."id" IS '主键';
 COMMENT ON COLUMN "public"."t_chat_message"."session_id" IS '关联 t_chat_session.id';
-COMMENT ON COLUMN "public"."t_chat_message"."role" IS '角色：user | assistant | tool';
+COMMENT ON COLUMN "public"."t_chat_message"."role" IS '角色：user | assistant | system';
 COMMENT ON COLUMN "public"."t_chat_message"."content" IS '消息内容';
 COMMENT ON COLUMN "public"."t_chat_message"."tokens" IS '本条消息消耗的 tokens';
+COMMENT ON COLUMN "public"."t_chat_message"."finish_reason" IS '结束原因：stop | length | error';
+COMMENT ON COLUMN "public"."t_chat_message"."latency_ms" IS '响应耗时 ms（assistant 消息记录）';
 COMMENT ON TABLE "public"."t_chat_message" IS '对话消息（游标分页，禁止 LIMIT offset）';
 
 -- ----------------------------
@@ -113,8 +117,8 @@ START 1
 CACHE 1
 ),
                                            "agent_id" int8 NOT NULL,
-                                           "title" varchar(128) COLLATE "pg_catalog"."default" NOT NULL DEFAULT '新对话'::character varying,
-                                           "summary" varchar(512) COLLATE "pg_catalog"."default" NOT NULL DEFAULT ''::character varying,
+                                           "title" varchar(200) COLLATE "pg_catalog"."default" NOT NULL DEFAULT '新对话',
+                                           "status" varchar(20) COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'ACTIVE',
                                            "created_at" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
                                            "updated_at" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
                                            "deleted" int2 NOT NULL DEFAULT 0
@@ -123,8 +127,8 @@ CACHE 1
 ALTER TABLE "public"."t_chat_session" OWNER TO "zyy";
 COMMENT ON COLUMN "public"."t_chat_session"."id" IS '主键';
 COMMENT ON COLUMN "public"."t_chat_session"."agent_id" IS '关联 t_agent.id';
-COMMENT ON COLUMN "public"."t_chat_session"."title" IS '会话标题';
-COMMENT ON COLUMN "public"."t_chat_session"."summary" IS '摘要（首条消息自动截取）';
+COMMENT ON COLUMN "public"."t_chat_session"."title" IS '会话标题（首条消息前20字自动生成）';
+COMMENT ON COLUMN "public"."t_chat_session"."status" IS 'ACTIVE | ARCHIVED';
 COMMENT ON TABLE "public"."t_chat_session" IS '对话会话';
 
 -- ----------------------------
