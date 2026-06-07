@@ -7,9 +7,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -101,5 +100,39 @@ public class ChunkRepository {
                     hit.setDistance(rs.getDouble("distance"));
                     return hit;
                 });
+    }
+
+    // ================================================================
+    // 查询 & 删除（文档管理用）
+    // ================================================================
+
+    /**
+     * 查询某文档的全部未删除切片（按 chunk_index 正序）。
+     */
+    public List<ChunkRow> findByDocumentId(Long documentId) {
+        return tpl.query("""
+                SELECT id, document_id, chunk_index, content, token_count, created_at
+                FROM t_document_chunk
+                WHERE document_id = ? AND deleted = 0
+                ORDER BY chunk_index
+                """, (rs, rowNum) -> {
+            ChunkRow r = new ChunkRow();
+            r.setId(rs.getLong("id"));
+            r.setDocumentId(rs.getLong("document_id"));
+            r.setChunkIndex(rs.getInt("chunk_index"));
+            r.setContent(rs.getString("content"));
+            r.setTokenCount(rs.getInt("token_count"));
+            r.setCreatedAt(rs.getObject("created_at", LocalDateTime.class));
+            return r;
+        }, documentId);
+    }
+
+    /**
+     * 逻辑删除某文档的全部切片。
+     */
+    public int logicalDeleteByDocumentId(Long documentId) {
+        return tpl.update(
+                "UPDATE t_document_chunk SET deleted = 1 WHERE document_id = ? AND deleted = 0",
+                documentId);
     }
 }
