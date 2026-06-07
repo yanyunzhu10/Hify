@@ -211,22 +211,22 @@ ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-XX:+UseG1GC",
 
 ### SQL 文件管理规范
 
-**唯一 Schema 文件**：`deploy/sql/hify.sql`
+**唯一 Schema 文件**：`deploy/sql/postgre_hify.sql`
 
 - **所有数据库表结构变更必须更新此文件**，禁止在其他位置创建 schema.sql
-- 新增模块时，在 `hify.sql` 中添加该模块的所有表定义
+- 新增模块时，在 `postgre_hify.sql` 中添加该模块的所有表定义
 - 表定义按模块分组，用注释分隔（如 `-- ===== Provider 模块 =====`）
 - 每次变更后，必须能在空数据库中完整执行此文件创建所有表
 
 **执行方式**：
 ```bash
-psql -U postgres -d hify -f deploy/sql/hify.sql
+psql -U postgres -d hify -f deploy/sql/postgre_hify.sql
 ```
 
 **禁止**：
 - ❌ 在 `hify-app/src/main/resources/db/` 下创建 schema.sql
 - ❌ 在各模块下分散维护 SQL 文件
-- ❌ 只在数据库中手动建表而不更新 hify.sql
+- ❌ 只在数据库中手动建表而不更新 postgre_hify.sql
 
 ### PostgreSQL 通用字段约定
 

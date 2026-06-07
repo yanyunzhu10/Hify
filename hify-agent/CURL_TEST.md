@@ -148,4 +148,4 @@ spring:
       minimum-idle: 5
       connection-timeout: 3000
 ```
-并确认：PG 已启动、hify 库已执行 `deploy/sql/hify.sql`、且 t_model_config 至少有一条 enabled=1 的记录（供 Agent 绑定）。
+并确认：PG 已启动、hify 库已执行 `deploy/sql/postgre_hify.sql`、且 t_model_config 至少有一条 enabled=1 的记录（供 Agent 绑定）。

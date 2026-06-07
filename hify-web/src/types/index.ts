@@ -86,3 +86,26 @@ export interface Message {
   content: string
   createdAt: string
 }
+
+// ============ 对话引擎（chat 模块，后端 SseEmitter 流式接口） ============
+
+export interface ChatSession {
+  id: number
+  agentId: number
+  title: string
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatMessage {
+  id: number
+  sessionId: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  tokens?: number
+  finishReason?: string
+  latencyMs?: number
+  createdAt: string
+}
+

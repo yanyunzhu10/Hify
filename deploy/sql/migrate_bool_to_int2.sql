@@ -1,7 +1,7 @@
 -- ============================================================
 -- Migration: bool → int2 统一迁移
 --
--- 背景：hify.sql 中 deleted/enabled 列已从 bool 统一改为 int2，
+-- 背景：postgre_hify.sql 中 deleted/enabled 列已从 bool 统一改为 int2，
 -- 但已有数据库中的列仍是 bool 类型，导致 MyBatis-Plus 发送
 -- WHERE deleted=0 时 PG 报 "operator does not exist: boolean = integer"。
 --
@@ -15,7 +15,7 @@ BEGIN;
 
 -- ===== t_agent =====
 ALTER TABLE t_agent ALTER COLUMN enabled TYPE int2 USING (enabled::int)::int2;
--- (deleted 已在 hify.sql 中改为 int2，若库中已改则跳过)
+-- (deleted 已在 postgre_hify.sql 中改为 int2，若库中已改则跳过)
 
 -- ===== t_chat_message =====
 DROP INDEX IF EXISTS idx_chat_message_session_deleted_created;

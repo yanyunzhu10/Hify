@@ -30,7 +30,12 @@ public enum ErrorCode {
 
     // 630-649 agent
     AGENT_NAME_EXISTS(630, "Agent 名称已存在"),
-    AGENT_NOT_FOUND(631, "Agent 不存在");
+    AGENT_NOT_FOUND(631, "Agent 不存在"),
+
+    // 650-669 knowledge
+    KNOWLEDGE_BASE_NAME_EXISTS(650, "知识库名称已存在"),
+    KNOWLEDGE_BASE_NOT_FOUND(651, "知识库不存在"),
+    DOCUMENT_NOT_FOUND(652, "文档不存在");
 
     private final int code;
     private final String message;

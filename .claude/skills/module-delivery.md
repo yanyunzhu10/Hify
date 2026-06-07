@@ -35,12 +35,12 @@
 
 ---
 
-## Step 2 — 更新 hify.sql
+## Step 2 — 更新 postgre_hify.sql
 
 **目标**：数据库 DDL 与设计对齐。
 
 **产出物**：
-- `hify.sql` 新增表 DDL
+- `postgre_hify.sql` 新增表 DDL
 - `hify-h2.sql` H2 兼容版本（JSON → CLOB）
 
 **验证**：
