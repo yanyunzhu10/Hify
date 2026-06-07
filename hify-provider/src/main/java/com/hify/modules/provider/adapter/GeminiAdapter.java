@@ -1,9 +1,11 @@
 package com.hify.modules.provider.adapter;
 
+import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,5 +40,11 @@ public class GeminiAdapter extends AbstractProviderAdapter {
     @Override
     public int parseModelCount(String responseBody) {
         return countArrayField(responseBody, "models");
+    }
+
+    @Override
+    public List<ModelInfo> parseModels(String responseBody) {
+        // Gemini: {"models": [{"name": "models/gemini-1.5-pro", "displayName": "Gemini 1.5 Pro"}, ...]}
+        return extractModelList(responseBody, "models", "name", "displayName");
     }
 }

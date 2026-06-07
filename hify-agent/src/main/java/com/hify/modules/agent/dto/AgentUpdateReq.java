@@ -40,7 +40,8 @@ public class AgentUpdateReq {
     @Min(value = 0, message = "maxContextTurns 不能为负")
     private Integer maxContextTurns;
 
-    private Boolean enabled;
+    /** 是否启用：0=不可用 1=可用 */
+    private Integer enabled;
 
     /** 关联的 MCP 工具 id 列表，全量覆盖（全删全插）；传空列表表示清空关联 */
     private List<Long> toolIds;

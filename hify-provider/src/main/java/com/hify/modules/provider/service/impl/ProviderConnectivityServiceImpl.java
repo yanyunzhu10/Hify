@@ -8,7 +8,9 @@ import com.hify.modules.provider.adapter.ProviderAdapterFactory;
 import com.hify.modules.provider.dto.ConnectionTestResult;
 import com.hify.modules.provider.entity.Provider;
 import com.hify.modules.provider.entity.ProviderHealth;
+import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.mapper.ProviderHealthMapper;
+import com.hify.modules.provider.service.ModelSyncService;
 import com.hify.modules.provider.service.ProviderConnectivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -26,6 +29,7 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
     private final LlmHttpClient llmHttpClient;
     private final ProviderHealthMapper providerHealthMapper;
     private final ProviderAdapterFactory adapterFactory;
+    private final ModelSyncService modelSyncService;
 
     @Override
     @Transactional
@@ -48,6 +52,10 @@ public class ProviderConnectivityServiceImpl implements ProviderConnectivityServ
 
             // 保存健康状态：成功
             saveHealthStatus(provider.getId(), "UP", latency, null, true);
+
+            // 同步模型列表到 t_model_config
+            List<ModelInfo> models = adapter.parseModels(body);
+            modelSyncService.sync(provider.getId(), models);
         } catch (LlmApiException e) {
             long latency = System.currentTimeMillis() - start;
             log.warn("连通性测试失败 provider={} type={} latencyMs={} error={}",

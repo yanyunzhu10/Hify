@@ -35,13 +35,14 @@ CACHE 1
                                     "temperature" numeric(3,2) NOT NULL DEFAULT 0.70,
                                     "max_tokens" int4 NOT NULL DEFAULT 2048,
                                     "max_context_turns" int4 NOT NULL DEFAULT 10,
-                                    "enabled" bool NOT NULL DEFAULT true,
+                                    "enabled" int2 NOT NULL DEFAULT 1,
                                     "created_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                     "updated_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                     "deleted" int2 NOT NULL DEFAULT 0
 )
 ;
 ALTER TABLE "public"."t_agent" OWNER TO "zyy";
+COMMENT ON COLUMN "public"."t_agent"."enabled" IS '是否启用：0=不可用 1=可用';
 COMMENT ON COLUMN "public"."t_agent"."deleted" IS '逻辑删除：0=未删 1=已删';
 COMMENT ON COLUMN "public"."t_agent"."system_prompt" IS '角色指令，可以很长';
 COMMENT ON COLUMN "public"."t_agent"."model_config_id" IS '绑定的模型配置';
@@ -170,13 +171,14 @@ CACHE 1
                                          "url" varchar(256) COLLATE "pg_catalog"."default" NOT NULL DEFAULT ''::character varying,
                                          "args" varchar(1024) COLLATE "pg_catalog"."default" NOT NULL DEFAULT '[]'::character varying,
                                          "env_vars" varchar(2048) COLLATE "pg_catalog"."default" NOT NULL DEFAULT '{}'::character varying,
-                                         "enabled" bool NOT NULL DEFAULT true,
+                                         "enabled" int2 NOT NULL DEFAULT 1,
                                          "created_at" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
                                          "updated_at" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
                                          "deleted" int2 NOT NULL DEFAULT 0
 )
 ;
 ALTER TABLE "public"."t_mcp_server" OWNER TO "zyy";
+COMMENT ON COLUMN "public"."t_mcp_server"."enabled" IS '是否启用：0=不可用 1=可用';
 COMMENT ON COLUMN "public"."t_mcp_server"."id" IS '主键';
 COMMENT ON COLUMN "public"."t_mcp_server"."name" IS 'MCP 服务名称';
 COMMENT ON COLUMN "public"."t_mcp_server"."description" IS '用途描述';
@@ -204,13 +206,14 @@ CACHE 1
                                            "model_id" varchar(100) COLLATE "pg_catalog"."default" NOT NULL,
                                            "context_size" int4,
                                            "extra_params" jsonb,
-                                           "enabled" bool DEFAULT true,
+                                           "enabled" int2 DEFAULT 1,
                                            "created_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                            "updated_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                            "deleted" int2 DEFAULT 0
 )
 ;
 ALTER TABLE "public"."t_model_config" OWNER TO "zyy";
+COMMENT ON COLUMN "public"."t_model_config"."enabled" IS '是否启用：0=不可用 1=可用';
 COMMENT ON COLUMN "public"."t_model_config"."id" IS '主键';
 COMMENT ON COLUMN "public"."t_model_config"."provider_id" IS '所属供应商 ID';
 COMMENT ON COLUMN "public"."t_model_config"."name" IS '展示名，如 GPT-4o';
@@ -236,13 +239,14 @@ CACHE 1
                                        "type" varchar(30) COLLATE "pg_catalog"."default" NOT NULL,
                                        "base_url" varchar(500) COLLATE "pg_catalog"."default" NOT NULL,
                                        "auth_config" jsonb,
-                                       "enabled" bool DEFAULT true,
+                                       "enabled" int2 DEFAULT 1,
                                        "created_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                        "updated_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                        "deleted" int2 DEFAULT 0
 )
 ;
 ALTER TABLE "public"."t_provider" OWNER TO "zyy";
+COMMENT ON COLUMN "public"."t_provider"."enabled" IS '是否启用：0=不可用 1=可用';
 COMMENT ON COLUMN "public"."t_provider"."id" IS '主键';
 COMMENT ON COLUMN "public"."t_provider"."name" IS '供应商名称，唯一';
 COMMENT ON COLUMN "public"."t_provider"."type" IS 'OPENAI/ANTHROPIC/OLLAMA/OPENAI_COMPATIBLE';
@@ -330,7 +334,7 @@ ALTER TABLE "public"."t_agent_tool" ADD CONSTRAINT "agent_tool_pkey" PRIMARY KEY
 -- ----------------------------
 CREATE INDEX "idx_chat_message_session_deleted_created" ON "public"."t_chat_message" USING btree (
     "session_id" "pg_catalog"."int8_ops" ASC NULLS LAST,
-    "deleted" "pg_catalog"."bool_ops" ASC NULLS LAST,
+    "deleted" ASC NULLS LAST,
     "created_at" "pg_catalog"."timestamp_ops" ASC NULLS LAST
     );
 
@@ -351,7 +355,7 @@ ALTER TABLE "public"."t_chat_message" ADD CONSTRAINT "t_chat_message_pkey" PRIMA
 -- ----------------------------
 CREATE INDEX "idx_chat_session_agent_deleted_updated" ON "public"."t_chat_session" USING btree (
     "agent_id" "pg_catalog"."int8_ops" ASC NULLS LAST,
-    "deleted" "pg_catalog"."bool_ops" ASC NULLS LAST,
+    "deleted" ASC NULLS LAST,
     "updated_at" "pg_catalog"."timestamp_ops" ASC NULLS LAST
     );
 
@@ -384,7 +388,7 @@ ALTER TABLE "public"."t_demo_item" ADD CONSTRAINT "t_demo_item_pkey" PRIMARY KEY
 -- ----------------------------
 CREATE INDEX "idx_mcp_server_type_deleted" ON "public"."t_mcp_server" USING btree (
     "type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
-    "deleted" "pg_catalog"."bool_ops" ASC NULLS LAST
+    "deleted" ASC NULLS LAST
     );
 
 -- ----------------------------

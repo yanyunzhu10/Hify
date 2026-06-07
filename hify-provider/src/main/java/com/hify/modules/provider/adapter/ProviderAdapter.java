@@ -1,7 +1,9 @@
 package com.hify.modules.provider.adapter;
 
+import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,4 +51,13 @@ public interface ProviderAdapter {
      * @return 可用模型数量，解析失败返回 0
      */
     int parseModelCount(String responseBody);
+
+    /**
+     * 从探测响应体解析模型列表（modelId + 展示名），供同步到 t_model_config。
+     * 解析失败返回空列表（连通性已成功，同步为附加能力）。
+     *
+     * @param responseBody 探测端点返回的响应体
+     * @return 模型列表，解析失败返回空列表
+     */
+    List<ModelInfo> parseModels(String responseBody);
 }

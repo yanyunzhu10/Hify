@@ -48,14 +48,24 @@ export interface ConnectionTestResult {
   errorMessage?: string
 }
 
+export interface AgentToolBrief {
+  toolId: number
+  toolName?: string
+}
+
 export interface AgentConfig {
   id: number
   name: string
   description?: string
   systemPrompt: string
-  providerId: number
-  providerName?: string
-  enabled: boolean
+  modelConfigId: number
+  modelName?: string
+  temperature: number
+  maxTokens: number
+  maxContextTurns: number
+  enabled: number          // 0=不可用 1=可用
+  toolCount: number
+  tools?: AgentToolBrief[]
   createdAt: string
   updatedAt: string
 }

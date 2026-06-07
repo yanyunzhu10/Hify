@@ -4,9 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
+import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -50,6 +54,47 @@ abstract class AbstractProviderAdapter implements ProviderAdapter {
         } catch (Exception e) {
             log.debug("解析模型数量失败 field={}", arrayField, e);
             return 0;
+        }
+    }
+
+    /**
+     * 从 JSON 数组字段逐条提取模型信息。
+     * <p>
+     * 各供应商的模型列表结构：
+     * <ul>
+     *   <li>OpenAI / Anthropic：arrayField="data", idField="id", nameField 传 null → 展示名用 id</li>
+     *   <li>Ollama：arrayField="models", idField="name", nameField 传 null → 展示名用 name</li>
+     *   <li>Gemini：arrayField="models", idField="name", nameField="displayName" → 展示名取 displayName</li>
+     * </ul>
+     *
+     * @param responseBody 响应体
+     * @param arrayField   模型数组所在的 JSON 字段
+     * @param idField      每条模型的唯一标识字段（如 "id" / "name"）
+     * @param nameField    展示名字段，可为 null（此时取 idField 的值）
+     * @return 模型列表，解析失败返回空列表
+     */
+    protected List<ModelInfo> extractModelList(String responseBody, String arrayField,
+                                                String idField, String nameField) {
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(responseBody);
+            JsonNode arr = root.get(arrayField);
+            if (arr == null || !arr.isArray()) {
+                return Collections.emptyList();
+            }
+            List<ModelInfo> list = new ArrayList<>();
+            for (JsonNode item : arr) {
+                String modelId = item.has(idField) ? item.get(idField).asText() : null;
+                if (modelId == null || modelId.isBlank()) {
+                    continue;
+                }
+                String name = (nameField != null && item.has(nameField))
+                        ? item.get(nameField).asText() : modelId;
+                list.add(ModelInfo.of(modelId, name));
+            }
+            return list;
+        } catch (Exception e) {
+            log.debug("解析模型列表失败 arrayField={} idField={}", arrayField, idField, e);
+            return Collections.emptyList();
         }
     }
 }

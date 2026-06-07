@@ -43,8 +43,8 @@ public class AgentCreateReq {
     @Min(value = 0, message = "maxContextTurns 不能为负")
     private Integer maxContextTurns;
 
-    /** 是否启用，不传默认启用 */
-    private Boolean enabled;
+    /** 是否启用：0=不可用 1=可用，不传默认 1 */
+    private Integer enabled;
 
     /** 关联的 MCP 工具 id 列表（t_mcp_server.id），可为空 */
     private List<Long> toolIds;

@@ -34,7 +34,7 @@ public class ModelConfig extends BaseEntity {
     private Integer contextSize;
 
     /** 模型级别扩展参数（JSON），如 temperature、top_p、max_tokens 等 */
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = com.hify.common.handler.PgJsonbTypeHandler.class)
     private Map<String, Object> extraParams;
 
     /** 0=禁用 1=启用 */

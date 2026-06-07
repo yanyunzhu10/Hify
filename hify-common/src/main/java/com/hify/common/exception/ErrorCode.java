@@ -23,10 +23,14 @@ public enum ErrorCode {
     LLM_AUTH_FAILED(401, "LLM 认证失败"),
     LLM_RATE_LIMITED(429, "LLM 限流"),
 
-    // 业务错误
-    PROVIDER_NAME_EXISTS(409, "供应商名称已存在"),
-    AGENT_NAME_EXISTS(409, "Agent 名称已存在"),
-    MODEL_CONFIG_NOT_FOUND(404, "模型配置不存在或未启用");
+    // ===== 业务错误：从 600 起，按模块分段，禁止复用 HTTP 状态码 =====
+    // 610-629 provider / model
+    PROVIDER_NAME_EXISTS(610, "供应商名称已存在"),
+    MODEL_CONFIG_NOT_FOUND(611, "模型配置不存在或未启用"),
+
+    // 630-649 agent
+    AGENT_NAME_EXISTS(630, "Agent 名称已存在"),
+    AGENT_NOT_FOUND(631, "Agent 不存在");
 
     private final int code;
     private final String message;

@@ -36,7 +36,7 @@ public class Provider extends BaseEntity {
     private String baseUrl;
 
     /** 鉴权配置（JSON），结构按 type 不同 */
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = com.hify.common.handler.PgJsonbTypeHandler.class)
     private Map<String, Object> authConfig;
 
     /** 0=禁用 1=启用 */

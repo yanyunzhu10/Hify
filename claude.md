@@ -334,9 +334,34 @@ LIMIT 20;
 6. **禁止 catch 后 `e.printStackTrace()` 或空 catch**，必须记录日志或向上抛出。
 7. **业务异常统一抛 `BizException(ErrorCode)`**，不用 RuntimeException 传递业务语义。
 8. **异常处理必须使用 ErrorCode 枚举，禁止硬编码错误码和错误信息**
-8. **只在顶层（GlobalExceptionHandler）处理并转换为 HTTP 响应**，中间层不捕获再包装。
-9. **finally 块不写 return**，不在 finally 中抛出新异常（会吞掉原始异常）。
-10. **NPE 防御**：方法返回值优先返回空集合（`Collections.emptyList()`）而非 null，接口入参用 `@NonNull`/`@Valid` 注解声明约束。
+9. **只在顶层（GlobalExceptionHandler）处理并转换为 HTTP 响应**，中间层不捕获再包装。
+10. **finally 块不写 return**，不在 finally 中抛出新异常（会吞掉原始异常）。
+11. **NPE 防御**：方法返回值优先返回空集合（`Collections.emptyList()`）而非 null，接口入参用 `@NonNull`/`@Valid` 注解声明约束。
+
+### ErrorCode 错误码分配规范
+
+`ErrorCode` 的 `code` 只写入响应体 `Result.code`（HTTP 状态恒为 200），是**前端用于判分支的业务码**，因此必须全局唯一、可反查归属。
+
+**两段制**：
+- **协议级错误**：直接复用 HTTP 语义码（400/401/403/404/405/429/500/502/503/504），仅用于框架层、鉴权、参数校验等与具体业务无关的场景
+- **业务级错误**：从 **600** 起，按模块分段编号，**禁止复用 4xx/5xx**（否则 `NOT_FOUND` 与「某资源不存在」撞码，无法区分）
+
+**模块号段分配**（每段预留 20 个）：
+
+| 区间 | 模块 | 示例 |
+|------|------|------|
+| 600–609 | 通用业务 | |
+| 610–629 | provider / model | `PROVIDER_NAME_EXISTS(610)`、`MODEL_CONFIG_NOT_FOUND(611)` |
+| 630–649 | agent | `AGENT_NAME_EXISTS(630)`、`AGENT_NOT_FOUND(631)` |
+| 650–669 | knowledge | |
+| 670–689 | mcp | |
+| 690–709 | workflow | |
+| 710–729 | chat | |
+
+**规则**：
+1. 新增业务码在所属模块号段内**顺序追加**，不跳号、不复用 HTTP 码
+2. 「资源不存在」用业务码（如 `AGENT_NOT_FOUND(631)`），不要用通用 `NOT_FOUND(404)`——后者仅留给框架级路由未命中
+3. 号段用尽（超 20 个）时向后扩展并在本表登记新区间
 
 ### 日志
 

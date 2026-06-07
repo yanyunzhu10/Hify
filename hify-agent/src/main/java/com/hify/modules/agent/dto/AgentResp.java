@@ -25,15 +25,19 @@ public class AgentResp {
     private BigDecimal temperature;
     private Integer maxTokens;
     private Integer maxContextTurns;
-    private Boolean enabled;
+    /** 是否启用：0=不可用 1=可用 */
+    private Integer enabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     /** 绑定模型的展示名，由 model 模块富化填充；未富化时为 null */
     private String modelName;
 
-    /** 关联的 MCP 工具列表，由 Service 富化填充 */
+    /** 关联的 MCP 工具列表（详情场景填充；列表场景通常为空，只给数量） */
     private List<AgentToolBrief> tools;
+
+    /** 关联工具数量（列表场景填充，避免传完整工具列表） */
+    private int toolCount;
 
     /**
      * 由实体构建响应，仅拷贝主表字段。关联与富化字段由调用方后续设置。

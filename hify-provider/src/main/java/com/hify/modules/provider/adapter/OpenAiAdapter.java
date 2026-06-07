@@ -1,9 +1,11 @@
 package com.hify.modules.provider.adapter;
 
+import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,5 +39,10 @@ public class OpenAiAdapter extends AbstractProviderAdapter {
     @Override
     public int parseModelCount(String responseBody) {
         return countArrayField(responseBody, "data");
+    }
+
+    @Override
+    public List<ModelInfo> parseModels(String responseBody) {
+        return extractModelList(responseBody, "data", "id", null);
     }
 }

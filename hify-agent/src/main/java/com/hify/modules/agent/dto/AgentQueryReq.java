@@ -18,6 +18,6 @@ public class AgentQueryReq {
     /** 按名称模糊筛选，可空 */
     private String name;
 
-    /** 按启用状态筛选，可空 */
-    private Boolean enabled;
+    /** 按启用状态筛选：0=不可用 1=可用，可空 */
+    private Integer enabled;
 }

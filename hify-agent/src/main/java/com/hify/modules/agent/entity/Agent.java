@@ -41,6 +41,6 @@ public class Agent extends BaseEntity {
     /** 保留最近几轮上下文 */
     private Integer maxContextTurns;
 
-    /** 是否启用 */
-    private Boolean enabled;
+    /** 是否启用：0=不可用 1=可用 */
+    private Integer enabled;
 }
