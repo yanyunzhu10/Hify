@@ -62,6 +62,7 @@ const route = useRoute()
 const menu = [
   { path: '/provider', label: '模型管理', icon: 'Setting' },
   { path: '/agent', label: 'Agent 管理', icon: 'User' },
+  { path: '/knowledge-bases', label: '知识库', icon: 'Collection' },
   { path: '/chat', label: '对话', icon: 'ChatDotRound' },
 ]
 

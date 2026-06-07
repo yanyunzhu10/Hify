@@ -33,3 +33,7 @@ export function updateKnowledgeBase(id: number, payload: KnowledgeBaseUpdateReq)
 export function deleteKnowledgeBase(id: number) {
   return del<void>(`/v1/knowledge-bases/${id}`)
 }
+
+export function getKnowledgeBase(id: number) {
+  return get<KnowledgeBase>(`/v1/knowledge-bases/${id}`)
+}

@@ -27,6 +27,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/chat/ChatView.vue'),
         meta: { title: '对话' },
       },
+      {
+        path: 'knowledge-bases',
+        name: 'KnowledgeBaseList',
+        component: () => import('@/views/knowledge/KnowledgeBaseList.vue'),
+        meta: { title: '知识库管理' },
+      },
+      {
+        path: 'knowledge-bases/:kbId/documents',
+        name: 'DocumentList',
+        component: () => import('@/views/knowledge/DocumentList.vue'),
+        meta: { title: '文档管理' },
+      },
     ],
   },
 ]

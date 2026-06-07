@@ -109,3 +109,39 @@ export interface ChatMessage {
   createdAt: string
 }
 
+// ============ 知识库管理 ============
+
+export interface KnowledgeBase {
+  id: number
+  name: string
+  description: string
+  enabled: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ============ 文档管理 ============
+
+export interface DocumentInfo {
+  id: number
+  knowledgeBaseId: number
+  name: string
+  fileType: string
+  fileSize: number
+  /** PENDING | PROCESSING | DONE | FAILED */
+  status: string
+  errorMessage?: string
+  chunkCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChunkInfo {
+  id: number
+  documentId: number
+  chunkIndex: number
+  content: string
+  tokenCount: number
+  createdAt: string
+}
+

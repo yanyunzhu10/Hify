@@ -68,7 +68,7 @@ public class DocumentServiceImpl implements DocumentService {
     // ================================================================
 
     @Override
-    @Transactional
+    // 不加 @Transactional：单条 insert 本身是原子的；async 线程需要立刻读到已提交行
     public DocumentResp upload(Long kbId, String filename, byte[] content) {
         // 0) 校验知识库存在
         kbService.getById(kbId);
@@ -139,11 +139,14 @@ public class DocumentServiceImpl implements DocumentService {
             }
             chunkRepo.batchInsert(rows);
 
-            // ⑤ 更新 chunk_count + 状态 → DONE
-            Document doc = requireDoc(docId);
-            doc.setChunkCount(chunks.size());
-            doc.setStatus("DONE");
-            docMapper.updateById(doc);
+            // ⑤ 更新 chunk_count + 状态 → DONE（直接 UPDATE，不 SELECT）
+            {
+                var wrapper = new LambdaQueryWrapper<Document>().eq(Document::getId, docId);
+                Document patch = new Document();
+                patch.setChunkCount(chunks.size());
+                patch.setStatus("DONE");
+                docMapper.update(patch, wrapper);
+            }
 
             log.info("文档处理完成 id={} chunks={}", docId, chunks.size());
         } catch (Exception e) {
@@ -209,14 +212,16 @@ public class DocumentServiceImpl implements DocumentService {
         return doc;
     }
 
+    /** 直接 UPDATE 状态字段，不先 SELECT（异步线程里 requireDoc 可能因事务未提交而读不到行）。 */
     private void updateStatus(Long docId, String status, String errorMsg) {
-        Document doc = requireDoc(docId);
-        doc.setStatus(status);
-        if (errorMsg != null && errorMsg.length() > 500) {
-            errorMsg = errorMsg.substring(0, 500);
+        var wrapper = new LambdaQueryWrapper<Document>().eq(Document::getId, docId);
+        Document patch = new Document();
+        patch.setStatus(status);
+        if (errorMsg != null) {
+            if (errorMsg.length() > 500) errorMsg = errorMsg.substring(0, 500);
+            patch.setErrorMessage(errorMsg);
         }
-        doc.setErrorMessage(errorMsg);
-        docMapper.updateById(doc);
+        docMapper.update(patch, wrapper);
     }
 
     private String extractExt(String filename) {
