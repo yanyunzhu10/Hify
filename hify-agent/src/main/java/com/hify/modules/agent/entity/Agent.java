@@ -32,6 +32,9 @@ public class Agent extends BaseEntity {
     /** 绑定的模型配置 t_model_config.id */
     private Long modelConfigId;
 
+    /** 关联的知识库 t_knowledge_base.id（可空，未绑定知识库时为 null） */
+    private Long knowledgeBaseId;
+
     /** 采样温度 0.00~1.00 */
     private BigDecimal temperature;
 

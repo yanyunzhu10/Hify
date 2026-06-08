@@ -22,6 +22,7 @@ CREATE TABLE `t_agent` (
 `description` varchar(500) NOT NULL DEFAULT '' COMMENT '描述',
 `system_prompt` text NOT NULL COMMENT '角色指令，可以很长',
 `model_config_id` bigint NOT NULL COMMENT '绑定的模型配置',
+`knowledge_base_id` bigint DEFAULT NULL COMMENT '关联知识库 ID（可空，未绑定知识库）',
 `temperature` decimal(3,2) NOT NULL DEFAULT 0.70 COMMENT '0.00~1.00',
 `max_tokens` int NOT NULL DEFAULT 2048 COMMENT '最大token数',
 `max_context_turns` int NOT NULL DEFAULT 10 COMMENT '保留最近几轮上下文',

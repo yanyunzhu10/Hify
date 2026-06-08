@@ -2,6 +2,7 @@ package com.hify.modules.knowledge.config;
 
 import com.pgvector.PGvector;
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -27,7 +28,7 @@ public class PgVectorConfig {
         return new DataSourceProperties();
     }
 
-    @Bean
+    @Bean("pgvectorDataSource")
     public DataSource pgvectorDataSource() {
         return pgvectorDataSourceProperties()
                 .initializeDataSourceBuilder()
@@ -35,16 +36,16 @@ public class PgVectorConfig {
                 .build();
     }
 
-    @Bean
-    public JdbcTemplate pgvectorJdbcTemplate(DataSource pgvectorDataSource) {
+    @Bean("pgvectorJdbcTemplate")
+    public JdbcTemplate pgvectorJdbcTemplate(@Qualifier("pgvectorDataSource") DataSource pgvectorDataSource) {
         JdbcTemplate t = new JdbcTemplate(pgvectorDataSource);
         // 每次查询前确保 PG 驱动认识 vector 类型（连接池复用时只需注册一次，但无副作用）
         t.setQueryTimeout(30);
         return t;
     }
 
-    @Bean
-    public NamedParameterJdbcTemplate pgvectorNamedJdbcTemplate(DataSource pgvectorDataSource) {
+    @Bean("pgvectorNamedJdbcTemplate")
+    public NamedParameterJdbcTemplate pgvectorNamedJdbcTemplate(@Qualifier("pgvectorDataSource") DataSource pgvectorDataSource) {
         return new NamedParameterJdbcTemplate(pgvectorDataSource);
     }
 }

@@ -1,7 +1,6 @@
 package com.hify.modules.knowledge.repository;
 
 import com.pgvector.PGvector;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,11 +20,18 @@ import java.util.List;
  */
 @Slf4j
 @Repository
-@RequiredArgsConstructor
 public class ChunkRepository {
 
-    @Qualifier("pgvectorJdbcTemplate")
+    /**
+     * 显式构造注入并带 @Qualifier，确保拿到 pgvector 数据源的 JdbcTemplate。
+     * 不能用 Lombok @RequiredArgsConstructor + 字段上的 @Qualifier：
+     * Lombok 默认不会把 @Qualifier 复制到构造参数，会导致注入到 @Primary(MySQL) 的那个。
+     */
     private final JdbcTemplate tpl;
+
+    public ChunkRepository(@Qualifier("pgvectorJdbcTemplate") JdbcTemplate tpl) {
+        this.tpl = tpl;
+    }
 
     // ================================================================
     // 批量写入

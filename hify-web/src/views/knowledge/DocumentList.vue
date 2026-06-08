@@ -162,6 +162,7 @@ import {
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import type { UploadRequestOptions } from 'element-plus'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import HifyTable from '@/components/HifyTable.vue'
 import type { HifyTableColumn } from '@/components/HifyTable.vue'
@@ -257,10 +258,10 @@ function beforeUpload(file: File) {
   return true
 }
 
-async function doUpload(options: { file: File; onSuccess: () => void; onError: (e: Error) => void }) {
+async function doUpload(options: UploadRequestOptions) {
   try {
     const doc = await uploadDocument(kbId, options.file)
-    options.onSuccess()
+    options.onSuccess(doc)
     ElMessage.success(`「${doc.name}」上传成功，开始处理`)
     // 将新 doc 加入轮询队列
     if (doc.status === 'PENDING' || doc.status === 'PROCESSING') {
@@ -269,7 +270,7 @@ async function doUpload(options: { file: File; onSuccess: () => void; onError: (
     }
     tableRef.value?.reload()
   } catch (e) {
-    options.onError(e as Error)
+    options.onError(e as Parameters<typeof options.onError>[0])
   }
 }
 

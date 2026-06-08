@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -87,17 +88,27 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     public void delete(Long id) {
         KnowledgeBase kb = requireKb(id);
 
-        // 1) 逻辑删除关联的全部 document（MyBatis-Plus logic-delete 自动标记 deleted=1）
+        // 1) 先从 MySQL 查出该知识库下的全部 documentId（跨库，不能用一条 SQL JOIN）
+        List<Long> docIds = docMapper.selectList(new LambdaQueryWrapper<Document>()
+                        .select(Document::getId)
+                        .eq(Document::getKnowledgeBaseId, id))
+                .stream().map(Document::getId).toList();
+
+        // 2) 逻辑删除 PG 里的 document_chunk（按 documentId 列表，避免子查询 MySQL 的 t_document）
+        if (!docIds.isEmpty()) {
+            String placeholders = docIds.stream().map(x -> "?").collect(Collectors.joining(","));
+            pgvectorJdbcTemplate.update(
+                    "UPDATE t_document_chunk SET deleted = 1 WHERE document_id IN (" + placeholders + ")",
+                    docIds.toArray());
+        }
+
+        // 3) 逻辑删除 MySQL 里的 document（MyBatis-Plus logic-delete 自动标记 deleted=1）
         docMapper.delete(new LambdaQueryWrapper<Document>()
                 .eq(Document::getKnowledgeBaseId, id));
 
-        // 2) 逻辑删除 document_chunk（PG 侧，用简单 UPDATE）
-        pgvectorJdbcTemplate.update("UPDATE t_document_chunk SET deleted = 1 "
-                + "WHERE document_id IN (SELECT id FROM t_document WHERE knowledge_base_id = ?)", id);
-
-        // 3) 逻辑删除知识库自身
+        // 4) 逻辑删除知识库自身
         kbMapper.deleteById(id);
-        log.info("知识库删除 id={}（关联 document + chunk 已级联标记删除）", id);
+        log.info("知识库删除 id={}（document={} 条 + 关联 chunk 已级联标记删除）", id, docIds.size());
     }
 
     // ============ 校验 ============
