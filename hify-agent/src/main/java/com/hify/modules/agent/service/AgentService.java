@@ -55,6 +55,15 @@ public interface AgentService {
     void updateTools(Long id, List<Long> toolIds);
 
     /**
+     * 轻量绑定/解绑知识库（仅更新 knowledge_base_id，不触碰其他字段）。
+     *
+     * @param id              Agent id
+     * @param knowledgeBaseId 知识库 id；null 表示解绑
+     * @return 更新后的 Agent 详情
+     */
+    AgentResp bindKnowledgeBase(Long id, Long knowledgeBaseId);
+
+    /**
      * 删除 Agent：事务内物理删关联工具表、逻辑删主表。
      *
      * @param id Agent id

@@ -40,14 +40,14 @@ public class ChunkRepository {
     /**
      * 批量插入切片向量。单条 SQL，一次 round-trip。
      *
-     * @param rows 每行：{documentId, chunkIndex, content, embedding, tokenCount}
+     * @param rows 每行：{documentId, knowledgeBaseId, chunkIndex, content, embedding, tokenCount}
      */
     public void batchInsert(List<Object[]> rows) {
         if (rows == null || rows.isEmpty()) return;
 
         tpl.batchUpdate("""
-                INSERT INTO t_document_chunk (document_id, chunk_index, content, embedding, token_count)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO t_document_chunk (document_id, knowledge_base_id, chunk_index, content, embedding, token_count)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """, rows);
         log.info("批量写入 {} 条向量", rows.size());
     }
@@ -58,26 +58,24 @@ public class ChunkRepository {
 
     /**
      * 余弦相似度 KNN 检索。返回 TopK 条切片原文 + 距离。
+     * <p>
+     * chunk（PG）与 document（MySQL）跨库，无法 JOIN，故按 chunk 表上冗余的
+     * {@code knowledge_base_id} 直接过滤。
+     * </p>
      *
      * @param queryVec       用户问题的 embedding（float[]）
      * @param knowledgeBaseId 知识库 id
      * @param topK           返回条数
      */
     public List<ChunkHit> searchNearest(float[] queryVec, Long knowledgeBaseId, int topK) {
-        // 思路：
-        //  1. SET LOCAL ivfflat.probes 控制召回精度
-        //  2. <=> 是余弦距离算子（越小越相似），按此排序取 topK
-        //  3. JOIN t_document 过滤知识库 + 状态
+        // <=> 是余弦距离算子（越小越相似），按此排序取 topK；SET LOCAL probes 控制召回精度
         tpl.execute("SET LOCAL ivfflat.probes = 10");
 
         String sql = """
                 SELECT c.id, c.document_id, c.chunk_index, c.content, c.token_count,
                        c.embedding <=> ?::vector AS distance
                 FROM t_document_chunk c
-                JOIN t_document d ON d.id = c.document_id
-                WHERE d.knowledge_base_id = ?
-                  AND d.status = 'DONE'
-                  AND d.deleted = 0
+                WHERE c.knowledge_base_id = ?
                   AND c.deleted = 0
                 ORDER BY c.embedding <=> ?::vector
                 LIMIT ?

@@ -1,6 +1,7 @@
 package com.hify.modules.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
@@ -58,6 +59,7 @@ public class AgentServiceImpl implements AgentService {
         agent.setDescription(req.getDescription());
         agent.setSystemPrompt(req.getSystemPrompt());
         agent.setModelConfigId(req.getModelConfigId());
+        agent.setKnowledgeBaseId(req.getKnowledgeBaseId());
         agent.setTemperature(req.getTemperature());
         agent.setMaxTokens(req.getMaxTokens());
         agent.setMaxContextTurns(req.getMaxContextTurns());
@@ -87,6 +89,7 @@ public class AgentServiceImpl implements AgentService {
         agent.setDescription(req.getDescription());
         agent.setSystemPrompt(req.getSystemPrompt());
         agent.setModelConfigId(req.getModelConfigId());
+        agent.setKnowledgeBaseId(req.getKnowledgeBaseId());
         agent.setTemperature(req.getTemperature());
         agent.setMaxTokens(req.getMaxTokens());
         agent.setMaxContextTurns(req.getMaxContextTurns());
@@ -114,6 +117,25 @@ public class AgentServiceImpl implements AgentService {
         agentToolMapper.delete(new LambdaQueryWrapper<AgentTool>().eq(AgentTool::getAgentId, id));
         List<AgentToolBrief> tools = insertAgentTools(id, toolIds);
         log.info("Agent 工具关联更新成功 id={}, toolCount={}", id, tools.size());
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(cacheNames = "agent-cache", allEntries = true)
+    public AgentResp bindKnowledgeBase(Long id, Long knowledgeBaseId) {
+        Agent agent = requireExists(id);
+        // 用 LambdaUpdateWrapper 显式 set：updateById 默认忽略 null 字段，无法支持解绑（置 null）
+        agentMapper.update(null, new LambdaUpdateWrapper<Agent>()
+                .eq(Agent::getId, id)
+                .set(Agent::getKnowledgeBaseId, knowledgeBaseId));
+        agent.setKnowledgeBaseId(knowledgeBaseId);
+        log.info("Agent 知识库绑定更新 id={}, knowledgeBaseId={}", id, knowledgeBaseId);
+
+        List<AgentToolBrief> tools = listToolBriefs(id);
+        AgentResp resp = AgentResp.from(agent, tools);
+        resp.setToolCount(tools.size());
+        enrichModelName(resp);
+        return resp;
     }
 
     @Override

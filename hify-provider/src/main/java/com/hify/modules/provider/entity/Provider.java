@@ -35,8 +35,8 @@ public class Provider extends BaseEntity {
     /** API 基础地址 */
     private String baseUrl;
 
-    /** 鉴权配置（JSON），结构按 type 不同 */
-    @TableField(typeHandler = com.hify.common.handler.PgJsonbTypeHandler.class)
+    /** 鉴权配置（JSON），结构按 type 不同。t_provider 在 MySQL，用 JacksonTypeHandler（setString），不能用 PG 专用 handler */
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> authConfig;
 
     /** 0=禁用 1=启用 */

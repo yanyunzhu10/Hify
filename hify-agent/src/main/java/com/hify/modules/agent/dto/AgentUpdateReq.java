@@ -30,6 +30,9 @@ public class AgentUpdateReq {
     @NotNull(message = "必须绑定模型配置")
     private Long modelConfigId;
 
+    /** 关联的知识库 id（t_knowledge_base.id），可空；传 null 表示不绑定/解绑 */
+    private Long knowledgeBaseId;
+
     @DecimalMin(value = "0.00", message = "temperature 不能小于 0")
     @DecimalMax(value = "1.00", message = "temperature 不能大于 1")
     private BigDecimal temperature;

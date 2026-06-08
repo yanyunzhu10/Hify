@@ -94,6 +94,14 @@ resilience4j:
 hify:
   knowledge:
     upload-dir: ./upload
+  embedding:
+    enabled: ${EMBEDDING_ENABLED:true}
+    # OpenAI 兼容 /embeddings 端点（DeepSeek/Claude 不支持 embeddings，需填真正支持的服务）
+    # 注意：base-url 末尾要带 /v1，代码会拼成 /v1/embeddings
+    base-url: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+    api-key: ${EMBEDDING_API_KEY:sk-iqyxudiunyakhfgetefhgdfnulzsacbkbsderlzdiriefwum}
+    model: ${EMBEDDING_MODEL:BAAI/bge-m3}
+    dimensions: ${EMBEDDING_DIMENSIONS:1024}
   llm:
     fallback:
       openai: ollama

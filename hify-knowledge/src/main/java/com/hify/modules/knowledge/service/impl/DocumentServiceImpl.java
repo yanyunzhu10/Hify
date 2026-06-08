@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
+import com.hify.common.http.EmbeddingClient;
 import com.hify.modules.knowledge.dto.ChunkResp;
 import com.hify.modules.knowledge.dto.DocumentResp;
 import com.hify.modules.knowledge.entity.Document;
@@ -36,23 +37,25 @@ public class DocumentServiceImpl implements DocumentService {
 
     private static final Set<String> ALLOWED_EXT = Set.of("txt", "md", "pdf");
     private static final long MAX_SIZE = 10 * 1024 * 1024L; // 10 MB
-    private static final int EMBEDDING_DIM = 1536;
     private static final int CHUNK_SIZE_CHARS = 500;
 
     private final DocumentMapper docMapper;
     private final ChunkRepository chunkRepo;
     private final KnowledgeBaseService kbService;
+    private final EmbeddingClient embeddingClient;
     private final ThreadPoolExecutor docProcessExecutor;
     private final Path uploadDir;
 
     public DocumentServiceImpl(DocumentMapper docMapper,
                                ChunkRepository chunkRepo,
                                KnowledgeBaseService kbService,
+                               EmbeddingClient embeddingClient,
                                @Qualifier("docProcessExecutor") ThreadPoolExecutor docProcessExecutor,
                                @Value("${hify.knowledge.upload-dir:./upload}") String uploadDirPath) {
         this.docMapper = docMapper;
         this.chunkRepo = chunkRepo;
         this.kbService = kbService;
+        this.embeddingClient = embeddingClient;
         this.docProcessExecutor = docProcessExecutor;
         this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
         try {
@@ -107,7 +110,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         // 5) 提交异步任务
         final Long docId = doc.getId();
-        docProcessExecutor.execute(() -> processAsync(docId, target));
+        docProcessExecutor.execute(() -> processAsync(docId, kbId, target));
 
         log.info("文档上传 id={} kbId={} name={} size={}",
                 docId, kbId, filename, content.length);
@@ -118,7 +121,7 @@ public class DocumentServiceImpl implements DocumentService {
     // 异步处理（运行在 docProcessExecutor 线程）
     // ================================================================
 
-    private void processAsync(Long docId, Path filePath) {
+    private void processAsync(Long docId, Long kbId, Path filePath) {
         log.info("开始异步处理文档 id={}", docId);
         try {
             // ① 标记 PROCESSING
@@ -130,12 +133,13 @@ public class DocumentServiceImpl implements DocumentService {
             // ③ 切块（简单按段落 + 长度分块）
             List<String> chunks = splitChunks(text, CHUNK_SIZE_CHARS);
 
-            // ④ 向量化（TODO: 接入 embedding 模型；当前用零向量占位）
+            // ④ 向量化（调 EmbeddingClient，批量；与对话检索侧用同一模型/维度）
+            List<float[]> vectors = embeddingClient.embedBatch(chunks);
             List<Object[]> rows = new ArrayList<>();
-            float[] zeroVec = new float[EMBEDDING_DIM]; // 全零占位
             for (int i = 0; i < chunks.size(); i++) {
                 String chunk = chunks.get(i);
-                rows.add(new Object[]{docId, i, chunk, zeroVec, estimateTokens(chunk)});
+                // 列顺序与 ChunkRepository.batchInsert 一致：documentId, kbId, chunkIndex, content, embedding, tokenCount
+                rows.add(new Object[]{docId, kbId, i, chunk, vectors.get(i), estimateTokens(chunk)});
             }
             chunkRepo.batchInsert(rows);
 

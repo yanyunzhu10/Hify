@@ -3,6 +3,7 @@ package com.hify.modules.agent.controller;
 import com.hify.common.web.PageResult;
 import com.hify.common.web.Result;
 import com.hify.modules.agent.dto.AgentCreateReq;
+import com.hify.modules.agent.dto.AgentKnowledgeBindReq;
 import com.hify.modules.agent.dto.AgentQueryReq;
 import com.hify.modules.agent.dto.AgentResp;
 import com.hify.modules.agent.dto.AgentToolsUpdateReq;
@@ -62,6 +63,13 @@ public class AgentController {
                                     @RequestBody AgentToolsUpdateReq req) {
         agentService.updateTools(id, req.getToolIds());
         return Result.ok();
+    }
+
+    /** 独立接口：仅绑定/解绑知识库（只需传 knowledgeBaseId，传 null 解绑） */
+    @PutMapping("/{id}/knowledge-base")
+    public Result<AgentResp> bindKnowledgeBase(@PathVariable Long id,
+                                               @RequestBody AgentKnowledgeBindReq req) {
+        return Result.ok(agentService.bindKnowledgeBase(id, req.getKnowledgeBaseId()));
     }
 
     @DeleteMapping("/{id}")

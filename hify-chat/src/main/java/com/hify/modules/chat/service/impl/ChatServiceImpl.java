@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
 import com.hify.common.exception.LlmApiException;
+import com.hify.common.http.EmbeddingClient;
 import com.hify.common.http.LlmHttpClient;
 import com.hify.modules.agent.entity.Agent;
 import com.hify.modules.agent.mapper.AgentMapper;
@@ -19,6 +20,8 @@ import com.hify.modules.chat.mapper.ChatSessionMapper;
 import com.hify.modules.chat.service.ChatContextCache;
 import com.hify.modules.chat.service.ChatMessageWriteService;
 import com.hify.modules.chat.service.ChatService;
+import com.hify.modules.knowledge.repository.ChunkHit;
+import com.hify.modules.knowledge.repository.ChunkRepository;
 import com.hify.modules.provider.adapter.ProviderAdapter;
 import com.hify.modules.provider.adapter.ProviderAdapterFactory;
 import com.hify.modules.provider.dto.ChatRequest;
@@ -58,6 +61,11 @@ public class ChatServiceImpl implements ChatService {
     /** SSE 总超时：单次对话最长 120 秒内必须完成 LLM 输出 */
     private static final long SSE_TIMEOUT_MS = 120_000L;
 
+    /** RAG 检索返回的 chunk 条数 */
+    private static final int RAG_TOP_K = 3;
+    /** RAG 命中的最低相似度（余弦相似度，= 1 - 余弦距离），低于此值的结果丢弃 */
+    private static final double RAG_MIN_SIMILARITY = 0.75;
+
     private final LlmHttpClient llmHttpClient;
     private final AgentMapper agentMapper;
     private final ModelConfigMapper modelConfigMapper;
@@ -68,6 +76,8 @@ public class ChatServiceImpl implements ChatService {
     private final ChatContextCache contextCache;
     private final ProviderAdapterFactory adapterFactory;
     private final ObjectMapper objectMapper;
+    private final ChunkRepository chunkRepository;
+    private final EmbeddingClient embeddingClient;
 
     /** 流式 SSE 专用线程池（AbortPolicy：满载抛 RejectedExecutionException，上层转 503）。 */
     @Qualifier("llmStreamExecutor")
@@ -307,6 +317,7 @@ public class ChatServiceImpl implements ChatService {
      * 构建 LLM 请求的消息列表：system 首条 + 历史 N 轮（Redis 工作内存）+ 当前用户输入。
      * <p>
      * 历史窗口优先取 Redis；未命中则从 PG（source of truth）查最近 N 轮回填缓存。
+     * 若 Agent 绑定了知识库（{@code knowledgeBaseId} 非空），则在 system prompt 之后注入 RAG 检索结果。
      * </p>
      */
     private List<ChatRequest.Message> buildMessages(Agent agent, Long sessionId, String userContent) {
@@ -314,8 +325,8 @@ public class ChatServiceImpl implements ChatService {
 
         List<ChatRequest.Message> messages = new ArrayList<>();
 
-        // system 始终第一条
-        messages.add(message("system", agent.getSystemPrompt()));
+        // system 始终第一条：未绑定知识库 → 原始 prompt；绑定了 → 原始 prompt + RAG 检索结果
+        messages.add(message("system", buildSystemPrompt(agent, userContent)));
 
         // 历史窗口：先查 Redis 工作内存
         List<ChatRequest.Message> window = contextCache.getWindow(sessionId);
@@ -331,6 +342,52 @@ public class ChatServiceImpl implements ChatService {
 
         return messages;
     }
+
+    /**
+     * 构建 system prompt：未绑定知识库直接返回原始 prompt；绑定了则把相似度检索到的
+     * chunk 拼接在原始 prompt 之后（topK={@value #RAG_TOP_K}，过滤相似度低于 {@value #RAG_MIN_SIMILARITY}）。
+     * 检索失败或无命中时降级为原始 prompt，不影响对话主流程。
+     */
+    private String buildSystemPrompt(Agent agent, String userContent) {
+        String base = agent.getSystemPrompt();
+        Long kbId = agent.getKnowledgeBaseId();
+        if (kbId == null) {
+            return base; // 未绑定知识库，跳过 RAG
+        }
+
+        List<ChunkHit> kept;
+        try {
+            float[] queryVec = embedQuery(userContent);                 // 用户消息向量化
+            List<ChunkHit> hits = chunkRepository.searchNearest(queryVec, kbId, RAG_TOP_K);
+            // 相似度 = 1 - 余弦距离；过滤相似度低于阈值的结果
+            kept = hits.stream()
+                    .filter(h -> h.getDistance() != null && (1.0 - h.getDistance()) >= RAG_MIN_SIMILARITY)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("RAG 检索失败，降级为无知识库回答 kbId={}", kbId, e);
+            return base;
+        }
+
+        if (kept.isEmpty()) {
+            return base; // 没有命中相关资料，按原 prompt 回答
+        }
+
+        StringBuilder sb = new StringBuilder(base);
+        sb.append("\n\n请基于以下参考资料回答用户问题。\n")
+          .append("如果资料中没有相关信息，直接说\"我没有找到相关资料\"，不要编造。\n\n")
+          .append("【参考资料】\n");
+        int idx = 1;
+        for (ChunkHit hit : kept) {
+            sb.append("[").append(idx++).append("] ").append(hit.getContent()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /** 用户问题向量化（与文档分块使用同一 EmbeddingClient / 同一模型）。 */
+    private float[] embedQuery(String text) {
+        return embeddingClient.embed(text);
+    }
+
 
     /** 从 PG 查最近 maxTurns 轮历史（正序，最旧在前）。注意：此时用户消息已写入 PG，需排除当前这条。 */
     private List<ChatRequest.Message> loadHistoryFromDb(Long sessionId, int maxTurns) {

@@ -33,8 +33,8 @@ public class ModelConfig extends BaseEntity {
     /** 上下文窗口大小（token 数），用于 token 预算计算 */
     private Integer contextSize;
 
-    /** 模型级别扩展参数（JSON），如 temperature、top_p、max_tokens 等 */
-    @TableField(typeHandler = com.hify.common.handler.PgJsonbTypeHandler.class)
+    /** 模型级别扩展参数（JSON）。t_model_config 在 MySQL，用 JacksonTypeHandler（setString） */
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> extraParams;
 
     /** 0=禁用 1=启用 */
