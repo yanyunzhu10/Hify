@@ -63,8 +63,10 @@ public class ChatServiceImpl implements ChatService {
 
     /** RAG 检索返回的 chunk 条数 */
     private static final int RAG_TOP_K = 3;
-    /** RAG 命中的最低相似度（余弦相似度，= 1 - 余弦距离），低于此值的结果丢弃 */
-    private static final double RAG_MIN_SIMILARITY = 0.75;
+    /** RAG 命中的最低相似度（余弦相似度，= 1 - 余弦距离），低于此值的结果丢弃。
+     *  阈值与 embedding 模型相关：bge-m3 的相关内容相似度通常落在 0.5~0.7，故取 0.5；
+     *  若换 OpenAI text-embedding-3 可上调到 0.75 左右。 */
+    private static final double RAG_MIN_SIMILARITY = 0.5;
 
     private final LlmHttpClient llmHttpClient;
     private final AgentMapper agentMapper;
@@ -352,26 +354,42 @@ public class ChatServiceImpl implements ChatService {
         String base = agent.getSystemPrompt();
         Long kbId = agent.getKnowledgeBaseId();
         if (kbId == null) {
+            log.info("[RAG] agent={} 未绑定知识库，跳过检索", agent.getId());
             return base; // 未绑定知识库，跳过 RAG
         }
 
         List<ChunkHit> kept;
         try {
             float[] queryVec = embedQuery(userContent);                 // 用户消息向量化
+            log.info("[RAG] kbId={} 查询向量化完成 dim={} query=\"{}\"",
+                    kbId, queryVec.length, abbreviate(userContent));
+
             List<ChunkHit> hits = chunkRepository.searchNearest(queryVec, kbId, RAG_TOP_K);
+            // 打印每条命中的距离 / 相似度，便于判断是否过阈值
+            for (ChunkHit h : hits) {
+                double sim = h.getDistance() == null ? Double.NaN : 1.0 - h.getDistance();
+                log.info("[RAG] 候选 chunkId={} distance={} similarity={} pass={} content=\"{}\"",
+                        h.getId(), h.getDistance(), String.format("%.4f", sim),
+                        sim >= RAG_MIN_SIMILARITY, abbreviate(h.getContent()));
+            }
+
             // 相似度 = 1 - 余弦距离；过滤相似度低于阈值的结果
             kept = hits.stream()
                     .filter(h -> h.getDistance() != null && (1.0 - h.getDistance()) >= RAG_MIN_SIMILARITY)
                     .toList();
+            log.info("[RAG] kbId={} 召回 {} 条，过阈值(>={}) {} 条",
+                    kbId, hits.size(), RAG_MIN_SIMILARITY, kept.size());
         } catch (Exception e) {
             log.warn("RAG 检索失败，降级为无知识库回答 kbId={}", kbId, e);
             return base;
         }
 
         if (kept.isEmpty()) {
+            log.info("[RAG] kbId={} 无命中，按原始 prompt 回答（未注入知识库）", kbId);
             return base; // 没有命中相关资料，按原 prompt 回答
         }
 
+        log.info("[RAG] kbId={} 注入 {} 条参考资料到 system prompt", kbId, kept.size());
         StringBuilder sb = new StringBuilder(base);
         sb.append("\n\n请基于以下参考资料回答用户问题。\n")
           .append("如果资料中没有相关信息，直接说\"我没有找到相关资料\"，不要编造。\n\n")
@@ -386,6 +404,13 @@ public class ChatServiceImpl implements ChatService {
     /** 用户问题向量化（与文档分块使用同一 EmbeddingClient / 同一模型）。 */
     private float[] embedQuery(String text) {
         return embeddingClient.embed(text);
+    }
+
+    /** 日志用：截断长文本到 40 字、去换行，避免刷屏。 */
+    private String abbreviate(String s) {
+        if (s == null) return "";
+        String oneLine = s.replaceAll("\\s+", " ").trim();
+        return oneLine.length() > 40 ? oneLine.substring(0, 40) + "…" : oneLine;
     }
 
 
