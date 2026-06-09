@@ -24,6 +24,8 @@ public class AgentResp {
     private Long modelConfigId;
     /** 关联的知识库 id，未绑定为 null */
     private Long knowledgeBaseId;
+    /** 关联的工作流 id，未绑定为 null */
+    private Long workflowId;
     private BigDecimal temperature;
     private Integer maxTokens;
     private Integer maxContextTurns;
@@ -52,6 +54,7 @@ public class AgentResp {
         r.systemPrompt = agent.getSystemPrompt();
         r.modelConfigId = agent.getModelConfigId();
         r.knowledgeBaseId = agent.getKnowledgeBaseId();
+        r.workflowId = agent.getWorkflowId();
         r.temperature = agent.getTemperature();
         r.maxTokens = agent.getMaxTokens();
         r.maxContextTurns = agent.getMaxContextTurns();

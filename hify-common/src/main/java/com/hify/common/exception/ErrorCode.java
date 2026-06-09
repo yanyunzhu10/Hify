@@ -35,7 +35,13 @@ public enum ErrorCode {
     // 650-669 knowledge
     KNOWLEDGE_BASE_NAME_EXISTS(650, "知识库名称已存在"),
     KNOWLEDGE_BASE_NOT_FOUND(651, "知识库不存在"),
-    DOCUMENT_NOT_FOUND(652, "文档不存在");
+    DOCUMENT_NOT_FOUND(652, "文档不存在"),
+
+    // 690-709 workflow
+    WORKFLOW_NOT_FOUND(690, "工作流不存在"),
+    WORKFLOW_NAME_EXISTS(691, "工作流名称已存在"),
+    WORKFLOW_NODE_CONFIG_INVALID(692, "节点配置不合法"),
+    WORKFLOW_GRAPH_INVALID(693, "工作流图结构不合法");
 
     private final int code;
     private final String message;

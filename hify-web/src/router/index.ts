@@ -39,6 +39,24 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/knowledge/DocumentList.vue'),
         meta: { title: '文档管理' },
       },
+      {
+        path: 'workflows',
+        name: 'WorkflowList',
+        component: () => import('@/views/workflow/WorkflowList.vue'),
+        meta: { title: '工作流管理' },
+      },
+      {
+        path: 'workflows/create',
+        name: 'WorkflowCreate',
+        component: () => import('@/views/workflow/WorkflowCreate.vue'),
+        meta: { title: '新建工作流' },
+      },
+      {
+        path: 'workflows/:id',
+        name: 'WorkflowDetail',
+        component: () => import('@/views/workflow/WorkflowDetail.vue'),
+        meta: { title: '工作流详情' },
+      },
     ],
   },
 ]

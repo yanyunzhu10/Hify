@@ -23,6 +23,7 @@ CREATE TABLE `t_agent` (
 `system_prompt` text NOT NULL COMMENT '角色指令，可以很长',
 `model_config_id` bigint NOT NULL COMMENT '绑定的模型配置',
 `knowledge_base_id` bigint DEFAULT NULL COMMENT '关联知识库 ID（可空，未绑定知识库）',
+`workflow_id` bigint DEFAULT NULL COMMENT '关联工作流 ID（可空，未绑定工作流）',
 `temperature` decimal(3,2) NOT NULL DEFAULT 0.70 COMMENT '0.00~1.00',
 `max_tokens` int NOT NULL DEFAULT 2048 COMMENT '最大token数',
 `max_context_turns` int NOT NULL DEFAULT 10 COMMENT '保留最近几轮上下文',
@@ -207,5 +208,95 @@ CREATE TABLE `t_document` (
   PRIMARY KEY (`id`),
   KEY `idx_document_kb_status` (`knowledge_base_id`, `deleted`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库文档';
+
+-- ----------------------------
+-- Table structure for t_workflow（工作流：一张图 = 一条记录）
+-- ----------------------------
+DROP TABLE IF EXISTS `t_workflow`;
+CREATE TABLE `t_workflow` (
+  `id`          bigint       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `name`        varchar(100) NOT NULL COMMENT '工作流名称',
+  `description` varchar(500) NOT NULL DEFAULT '' COMMENT '描述',
+  `status`      varchar(20)  NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT 草稿 / PUBLISHED 已发布',
+  `enabled`     smallint     NOT NULL DEFAULT 1 COMMENT '是否启用：0=否 1=是',
+  `deleted`     smallint     NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `created_at`  timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
+  `updated_at`  timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作流';
+
+-- ----------------------------
+-- Table structure for t_workflow_node（节点：做什么。一节点一记录）
+-- ----------------------------
+DROP TABLE IF EXISTS `t_workflow_node`;
+CREATE TABLE `t_workflow_node` (
+  `id`          bigint       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `workflow_id` bigint       NOT NULL COMMENT '所属工作流 t_workflow.id',
+  `node_key`    varchar(64)  NOT NULL COMMENT '工作流内的稳定标识（如 classify/router），边用它引用',
+  `type`        varchar(20)  NOT NULL COMMENT '节点类型：START/LLM/CONDITION/TOOL/END',
+  `name`        varchar(100) NOT NULL COMMENT '节点展示名，如"意图识别"',
+  `config`      json         NULL     COMMENT '节点配置（结构按 type 不同：LLM 存 prompt，CONDITION 存 expression 等）',
+  `output_variable` varchar(64) NULL    COMMENT '执行结果写入的变量名，供后续节点用 {{var}} 引用',
+  `deleted`     smallint     NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `created_at`  timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
+  `updated_at`  timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  -- 不用唯一约束：更新走「逻辑删除旧节点 + 重插」，dead 行仍占用 (workflow_id, node_key)，
+  -- 唯一约束会导致重插冲突。node_key 唯一性由 Service 层在提交的图内校验。
+  KEY `idx_workflow_node_key` (`workflow_id`, `node_key`, `deleted`),
+  KEY `idx_workflow_node_wf` (`workflow_id`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作流节点';
+
+-- ----------------------------
+-- Table structure for t_workflow_edge（连线：做完去哪。一条跳转一记录）
+-- ----------------------------
+DROP TABLE IF EXISTS `t_workflow_edge`;
+CREATE TABLE `t_workflow_edge` (
+  `id`               bigint       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `workflow_id`      bigint       NOT NULL COMMENT '所属工作流 t_workflow.id',
+  `source_node_key`  varchar(64)  NOT NULL COMMENT '源节点 node_key',
+  `target_node_key`  varchar(64)  NOT NULL COMMENT '目标节点 node_key',
+  `condition_expr`   varchar(255) NULL     COMMENT '跳转条件（condition 是 MySQL 保留字，故用 condition_expr）；null=无条件直接走',
+  `deleted`          smallint     NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `created_at`       timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
+  `updated_at`       timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_workflow_edge_source` (`workflow_id`, `source_node_key`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作流连线';
+
+-- ----------------------------
+-- Table structure for t_workflow_run（整次执行记录）
+-- ----------------------------
+DROP TABLE IF EXISTS `t_workflow_run`;
+CREATE TABLE `t_workflow_run` (
+  `id`          bigint       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `workflow_id` bigint       NOT NULL COMMENT 't_workflow.id',
+  `status`      varchar(20)  NOT NULL DEFAULT 'RUNNING' COMMENT 'RUNNING/SUCCESS/FAILED',
+  `input`       text         NULL COMMENT '用户输入原文',
+  `output`      text         NULL COMMENT '最终输出',
+  `error`       varchar(500) NULL COMMENT '失败原因',
+  `elapsed_ms`  int          NULL COMMENT '执行耗时 ms',
+  `created_at`  timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `finished_at` timestamp(6) NULL,
+  KEY `idx_wf_run_wf` (`workflow_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作流执行记录';
+
+-- ----------------------------
+-- Table structure for t_workflow_node_run（每个节点的执行记录）
+-- ----------------------------
+DROP TABLE IF EXISTS `t_workflow_node_run`;
+CREATE TABLE `t_workflow_node_run` (
+  `id`              bigint       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `workflow_run_id` bigint       NOT NULL COMMENT 't_workflow_run.id',
+  `node_key`        varchar(64)  NOT NULL COMMENT '节点 key',
+  `node_type`       varchar(30)  NOT NULL COMMENT '节点类型',
+  `status`          varchar(20)  NOT NULL DEFAULT 'RUNNING' COMMENT 'RUNNING/SUCCESS/FAILED',
+  `outputs`         json         NULL COMMENT 'ctx.snapshot() 变量池快照',
+  `error`           varchar(500) NULL COMMENT '失败原因',
+  `elapsed_ms`      int          NULL COMMENT '节点执行耗时 ms',
+  `created_at`      timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `finished_at`     timestamp(6) NULL,
+  KEY `idx_node_run_run_id` (`workflow_run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作流节点执行记录';
 
 SET FOREIGN_KEY_CHECKS = 1;

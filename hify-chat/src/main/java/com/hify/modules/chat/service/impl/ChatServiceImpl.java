@@ -23,6 +23,7 @@ import com.hify.modules.chat.service.ChatService;
 import com.hify.modules.knowledge.repository.ChunkHit;
 import com.hify.modules.knowledge.repository.ChunkRepository;
 import com.hify.modules.provider.adapter.ProviderAdapter;
+import com.hify.modules.workflow.engine.WorkflowEngine;
 import com.hify.modules.provider.adapter.ProviderAdapterFactory;
 import com.hify.modules.provider.dto.ChatRequest;
 import com.hify.modules.provider.dto.ChatStreamChunk;
@@ -80,6 +81,7 @@ public class ChatServiceImpl implements ChatService {
     private final ObjectMapper objectMapper;
     private final ChunkRepository chunkRepository;
     private final EmbeddingClient embeddingClient;
+    private final WorkflowEngine workflowEngine;
 
     /** 流式 SSE 专用线程池（AbortPolicy：满载抛 RejectedExecutionException，上层转 503）。 */
     @Qualifier("llmStreamExecutor")
@@ -191,12 +193,47 @@ public class ChatServiceImpl implements ChatService {
             messageWriteService.saveUserMessage(sessionId, content);
             updateSessionTitleIfFirst(session, content);
 
-            // ── 第三步：读配置（Agent → Model → Provider） ──
+            // ── 第三步：读 Agent ──
             Agent agent = requireAgent(session.getAgentId());
+
+            // ── 第四步：工作流优先 ──
+            if (agent.getWorkflowId() != null) {
+                log.info("触发工作流 sessionId={} workflowId={}", sessionId, agent.getWorkflowId());
+                try {
+                    String result = workflowEngine.execute(agent.getWorkflowId(), content);
+                    messageWriteService.saveAssistantMessage(sessionId, result,
+                            countTokens(result), "stop",
+                            (int) (System.currentTimeMillis() - startMs));
+                    int maxTurns = agent.getMaxContextTurns() != null ? agent.getMaxContextTurns() : 10;
+                    contextCache.appendTurn(sessionId,
+                            message("user", content),
+                            message("assistant", result),
+                            maxTurns);
+                    updateSessionTitleIfFirst(session, content);
+                    try {
+                        emitter.send(SseEmitter.event().name("done").data("{}"));
+                    } catch (IOException ignore) {}
+                    emitter.complete();
+                    return;
+                } catch (BizException e) {
+                    log.warn("工作流执行失败 sessionId={}", sessionId, e);
+                    String errMsg = "工作流执行失败：" + e.getMessage();
+                    messageWriteService.saveAssistantMessage(sessionId, errMsg,
+                            countTokens(errMsg), "error",
+                            (int) (System.currentTimeMillis() - startMs));
+                    try {
+                        emitter.send(SseEmitter.event().data(errMsg));
+                        emitter.send(SseEmitter.event().name("done").data("{}"));
+                    } catch (IOException ignore) {}
+                    emitter.complete();
+                    return;
+                }
+            }
+
             ModelConfig modelConfig = requireModelConfig(agent.getModelConfigId());
             Provider provider = requireProvider(modelConfig.getProviderId());
 
-            // ── 第四步：拼装 LLM 请求 ──
+            // ── 第五步：拼装 LLM 请求 ──
             ProviderAdapter adapter = adapterFactory.get(provider.getType());
             String url = adapter.buildChatUrl(provider.getBaseUrl(), modelConfig.getModelId());
             Map<String, String> headers = adapter.buildAuthHeaders(provider);
@@ -209,7 +246,7 @@ public class ChatServiceImpl implements ChatService {
             chatReq.setStream(true);
             String body = adapter.buildChatRequestBody(chatReq);
 
-            // ── 第五步：流式调 LLM（stop 为取消信号，置位即中断 HTTP 读取） ──
+            // ── 第六步：流式调 LLM（stop 为取消信号，置位即中断 HTTP 读取） ──
             StringBuilder sb = new StringBuilder();
             llmHttpClient.streamCancellable(url, headers, body,
                     rawLine -> {
@@ -224,7 +261,7 @@ public class ChatServiceImpl implements ChatService {
             );
             fullContent = sb.toString();
 
-            // ── 第六步（异常路径）：客户端断开（send 失败）→ 保存部分回复并 completeWithError ──
+            // ── 第七步（异常路径）：客户端断开（send 失败）→ 保存部分回复并 completeWithError ──
             if (sendError.get() != null) {
                 savePartialReply(sessionId, fullContent, "error",
                         (int) (System.currentTimeMillis() - startMs));
@@ -232,14 +269,14 @@ public class ChatServiceImpl implements ChatService {
                 return;
             }
 
-            // ── 第七步（异常路径）：被 onTimeout 中止 → emitter 已 complete，仅保存部分回复 ──
+            // ── 第八步（异常路径）：被 onTimeout 中止 → emitter 已 complete，仅保存部分回复 ──
             if (stop.get()) {
                 savePartialReply(sessionId, fullContent, "length",
                         (int) (System.currentTimeMillis() - startMs));
                 return;
             }
 
-            // ── 第八步：正常结束，保存 assistant 回复（独立事务） ──
+            // ── 第九步：正常结束，保存 assistant 回复（独立事务） ──
             if (!fullContent.isEmpty()) {
                 messageWriteService.saveAssistantMessage(sessionId, fullContent,
                         countTokens(fullContent), "stop",

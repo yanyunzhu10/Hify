@@ -29,6 +29,11 @@
             <groupId>com.hify</groupId>
             <artifactId>hify-mcp</artifactId>
         </dependency>
+        <!-- 知识库检索节点（需要 ChunkRepository 做向量相似度查询） -->
+        <dependency>
+            <groupId>com.hify</groupId>
+            <artifactId>hify-knowledge</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

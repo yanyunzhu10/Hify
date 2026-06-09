@@ -60,6 +60,7 @@ public class AgentServiceImpl implements AgentService {
         agent.setSystemPrompt(req.getSystemPrompt());
         agent.setModelConfigId(req.getModelConfigId());
         agent.setKnowledgeBaseId(req.getKnowledgeBaseId());
+        agent.setWorkflowId(req.getWorkflowId());
         agent.setTemperature(req.getTemperature());
         agent.setMaxTokens(req.getMaxTokens());
         agent.setMaxContextTurns(req.getMaxContextTurns());
@@ -90,6 +91,7 @@ public class AgentServiceImpl implements AgentService {
         agent.setSystemPrompt(req.getSystemPrompt());
         agent.setModelConfigId(req.getModelConfigId());
         agent.setKnowledgeBaseId(req.getKnowledgeBaseId());
+        agent.setWorkflowId(req.getWorkflowId());
         agent.setTemperature(req.getTemperature());
         agent.setMaxTokens(req.getMaxTokens());
         agent.setMaxContextTurns(req.getMaxContextTurns());
@@ -122,14 +124,23 @@ public class AgentServiceImpl implements AgentService {
     @Override
     @Transactional
     @CacheEvict(cacheNames = "agent-cache", allEntries = true)
-    public AgentResp bindKnowledgeBase(Long id, Long knowledgeBaseId) {
+    public AgentResp bindResources(Long id, Long knowledgeBaseId, Long workflowId) {
         Agent agent = requireExists(id);
         // 用 LambdaUpdateWrapper 显式 set：updateById 默认忽略 null 字段，无法支持解绑（置 null）
-        agentMapper.update(null, new LambdaUpdateWrapper<Agent>()
-                .eq(Agent::getId, id)
-                .set(Agent::getKnowledgeBaseId, knowledgeBaseId));
-        agent.setKnowledgeBaseId(knowledgeBaseId);
-        log.info("Agent 知识库绑定更新 id={}, knowledgeBaseId={}", id, knowledgeBaseId);
+        LambdaUpdateWrapper<Agent> update = new LambdaUpdateWrapper<Agent>().eq(Agent::getId, id);
+        if (knowledgeBaseId != null) {
+            update.set(Agent::getKnowledgeBaseId, knowledgeBaseId);
+        }
+        if (workflowId != null) {
+            update.set(Agent::getWorkflowId, workflowId);
+        }
+        if (knowledgeBaseId == null && workflowId == null) {
+            // 两个都没传 → 不解绑，直接返回当前状态（幂等）
+        }
+        agentMapper.update(null, update);
+        agent.setKnowledgeBaseId(knowledgeBaseId != null ? knowledgeBaseId : agent.getKnowledgeBaseId());
+        agent.setWorkflowId(workflowId != null ? workflowId : agent.getWorkflowId());
+        log.info("Agent 资源绑定更新 id={}, knowledgeBaseId={}, workflowId={}", id, knowledgeBaseId, workflowId);
 
         List<AgentToolBrief> tools = listToolBriefs(id);
         AgentResp resp = AgentResp.from(agent, tools);

@@ -35,6 +35,9 @@ public class Agent extends BaseEntity {
     /** 关联的知识库 t_knowledge_base.id（可空，未绑定知识库时为 null） */
     private Long knowledgeBaseId;
 
+    /** 关联的工作流 t_workflow.id（可空，未绑定工作流时为 null） */
+    private Long workflowId;
+
     /** 采样温度 0.00~1.00 */
     private BigDecimal temperature;
 

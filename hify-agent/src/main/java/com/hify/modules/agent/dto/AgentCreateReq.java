@@ -33,6 +33,9 @@ public class AgentCreateReq {
     /** 关联的知识库 id（t_knowledge_base.id），可空 */
     private Long knowledgeBaseId;
 
+    /** 关联的工作流 id（t_workflow.id），可空 */
+    private Long workflowId;
+
     /** 采样温度 0.00~1.00，不传则用 DB 默认值 0.70 */
     @DecimalMin(value = "0.00", message = "temperature 不能小于 0")
     @DecimalMax(value = "1.00", message = "temperature 不能大于 1")

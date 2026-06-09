@@ -145,3 +145,40 @@ export interface ChunkInfo {
   createdAt: string
 }
 
+// ============ 工作流管理 ============
+
+export interface WorkflowNode {
+  id?: number
+  nodeKey: string
+  type: string
+  name: string
+  config?: Record<string, unknown>
+  outputVariable?: string
+}
+
+export interface WorkflowEdge {
+  id?: number
+  sourceNodeKey: string
+  targetNodeKey: string
+  conditionExpr?: string
+}
+
+export interface WorkflowInfo {
+  id: number
+  name: string
+  description: string
+  status: string
+  enabled: number
+  createdAt: string
+  updatedAt: string
+  nodes?: WorkflowNode[]
+  edges?: WorkflowEdge[]
+}
+
+export interface WorkflowCreateReq {
+  name: string
+  description?: string
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+}
+

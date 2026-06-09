@@ -65,11 +65,11 @@ public class AgentController {
         return Result.ok();
     }
 
-    /** 独立接口：仅绑定/解绑知识库（只需传 knowledgeBaseId，传 null 解绑） */
-    @PutMapping("/{id}/knowledge-base")
-    public Result<AgentResp> bindKnowledgeBase(@PathVariable Long id,
-                                               @RequestBody AgentKnowledgeBindReq req) {
-        return Result.ok(agentService.bindKnowledgeBase(id, req.getKnowledgeBaseId()));
+    /** 独立接口：轻量绑定/解绑知识库或工作流（只传要改的字段，传了才写） */
+    @PutMapping("/{id}/bindings")
+    public Result<AgentResp> bindResources(@PathVariable Long id,
+                                            @RequestBody AgentKnowledgeBindReq req) {
+        return Result.ok(agentService.bindResources(id, req.getKnowledgeBaseId(), req.getWorkflowId()));
     }
 
     @DeleteMapping("/{id}")
