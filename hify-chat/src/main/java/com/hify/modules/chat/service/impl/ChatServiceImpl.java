@@ -9,7 +9,9 @@ import com.hify.common.exception.LlmApiException;
 import com.hify.common.http.EmbeddingClient;
 import com.hify.common.http.LlmHttpClient;
 import com.hify.modules.agent.entity.Agent;
+import com.hify.modules.agent.entity.AgentTool;
 import com.hify.modules.agent.mapper.AgentMapper;
+import com.hify.modules.agent.mapper.AgentToolMapper;
 import com.hify.modules.chat.dto.MessageResp;
 import com.hify.modules.chat.dto.SessionCreateReq;
 import com.hify.modules.chat.dto.SessionResp;
@@ -25,7 +27,13 @@ import com.hify.modules.knowledge.repository.ChunkRepository;
 import com.hify.modules.provider.adapter.ProviderAdapter;
 import com.hify.modules.workflow.engine.WorkflowEngine;
 import com.hify.modules.provider.adapter.ProviderAdapterFactory;
+import com.hify.modules.mcp.entity.McpServer;
+import com.hify.modules.mcp.entity.McpTool;
+import com.hify.modules.mcp.mapper.McpServerMapper;
+import com.hify.modules.mcp.mapper.McpToolMapper;
+import com.hify.modules.mcp.service.McpClientService;
 import com.hify.modules.provider.dto.ChatRequest;
+import com.hify.modules.provider.dto.ChatResponse;
 import com.hify.modules.provider.dto.ChatStreamChunk;
 import com.hify.modules.provider.entity.ModelConfig;
 import com.hify.modules.provider.entity.Provider;
@@ -41,6 +49,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -82,6 +92,10 @@ public class ChatServiceImpl implements ChatService {
     private final ChunkRepository chunkRepository;
     private final EmbeddingClient embeddingClient;
     private final WorkflowEngine workflowEngine;
+    private final AgentToolMapper agentToolMapper;
+    private final McpServerMapper mcpServerMapper;
+    private final McpToolMapper mcpToolMapper;
+    private final McpClientService mcpClientService;
 
     /** 流式 SSE 专用线程池（AbortPolicy：满载抛 RejectedExecutionException，上层转 503）。 */
     @Qualifier("llmStreamExecutor")
@@ -249,23 +263,108 @@ public class ChatServiceImpl implements ChatService {
             chatReq.setMessages(buildMessages(agent, sessionId, content));
             chatReq.setTemperature(agent.getTemperature());
             chatReq.setMaxTokens(agent.getMaxTokens());
-            chatReq.setStream(true);
-            String body = adapter.buildChatRequestBody(chatReq);
 
-            // ── 第六步：流式调 LLM（stop 为取消信号，置位即中断 HTTP 读取） ──
-            StringBuilder sb = new StringBuilder();
-            llmHttpClient.streamCancellable(url, headers, body,
-                    rawLine -> {
-                        ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
-                        if (chunk == null || chunk.getContent() == null) {
-                            return;
+            // ── 第五点五步：加载 Agent 绑定的工具列表 ──
+            List<ToolBinding> toolBindings = loadToolBindings(agent.getId());
+
+            if (!toolBindings.isEmpty()) {
+                // tools 不为空：先走 tool_calls 分支
+                chatReq.setTools(buildToolSchemas(toolBindings));
+                chatReq.setToolChoice("auto");
+                chatReq.setStream(false);
+                String body = adapter.buildChatRequestBody(chatReq);
+
+                // 第一次调用 LLM（非流式），判断是否需要调工具
+                String firstResp = llmHttpClient.post(url, headers, body);
+                ChatResponse chatResp = adapter.parseChatResponse(firstResp);
+                List<Map<String, Object>> toolCalls = chatResp != null ? chatResp.getToolCalls() : null;
+
+                if ("tool_calls".equals(chatResp != null ? chatResp.getFinishReason() : null)
+                        && toolCalls != null && !toolCalls.isEmpty()) {
+                    // ── LLM 要求调工具 ──
+                    // 把 assistant 的 tool_calls 追加进历史
+                    ChatRequest.Message assistantMsg = new ChatRequest.Message();
+                    assistantMsg.setRole("assistant");
+                    assistantMsg.setToolCalls(toolCalls);
+                    chatReq.getMessages().add(assistantMsg);
+
+                    // 逐个执行工具
+                    for (Map<String, Object> tc : toolCalls) {
+                        String callId = (String) tc.getOrDefault("id", "");
+                        Map<String, Object> func = castMap(tc.get("function"));
+                        String toolName = func != null ? (String) func.getOrDefault("name", "") : "";
+                        String argsJson = func != null ? (String) func.getOrDefault("arguments", "{}") : "{}";
+                        log.info("[ToolCall] sessionId={} tool={} callId={}", sessionId, toolName, callId);
+
+                        String toolResult;
+                        try {
+                            ToolBinding binding = toolBindings.stream()
+                                    .filter(b -> b.toolName.equals(toolName)).findFirst().orElse(null);
+                            if (binding == null) {
+                                toolResult = "错误：未找到工具 " + toolName;
+                            } else {
+                                toolResult = mcpClientService.callTool(
+                                        mcpServerMapper.selectById(binding.mcpServerId), toolName,
+                                        objectMapper.readValue(argsJson, Map.class));
+                            }
+                        } catch (Exception e) {
+                            log.warn("[ToolCall] 工具执行失败 tool={}", toolName, e);
+                            toolResult = "工具调用失败：" + e.getMessage();
                         }
-                        sb.append(chunk.getContent());
-                        sendChunk(emitter, chunk.getContent(), stop, sendError);
-                    },
-                    stop::get
-            );
-            fullContent = sb.toString();
+                        // 追加 tool 消息
+                        ChatRequest.Message toolMsg = new ChatRequest.Message();
+                        toolMsg.setRole("tool");
+                        toolMsg.setToolCallId(callId);
+                        toolMsg.setContent(toolResult);
+                        chatReq.getMessages().add(toolMsg);
+                    }
+
+                    // 第二次调用 LLM（流式）
+                    chatReq.setTools(null);
+                    chatReq.setToolChoice(null);
+                    chatReq.setStream(true);
+                    String secondBody = adapter.buildChatRequestBody(chatReq);
+
+                    StringBuilder sb = new StringBuilder();
+                    llmHttpClient.streamCancellable(url, headers, secondBody,
+                            rawLine -> {
+                                ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
+                                if (chunk == null || chunk.getContent() == null) return;
+                                sb.append(chunk.getContent());
+                                sendChunk(emitter, chunk.getContent(), stop, sendError);
+                            },
+                            stop::get
+                    );
+                    fullContent = sb.toString();
+                } else {
+                    // 第一次直接返回了内容（不需要调工具），推送即可
+                    fullContent = chatResp != null ? chatResp.getContent() : "";
+                    if (fullContent != null && !fullContent.isEmpty()) {
+                        try {
+                            emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(fullContent)));
+                        } catch (IOException ignore) {}
+                    }
+                }
+            } else {
+                // tools 为空：和原有逻辑完全一致，一行不改
+                chatReq.setStream(true);
+                String body = adapter.buildChatRequestBody(chatReq);
+
+                // ── 第六步：流式调 LLM（stop 为取消信号，置位即中断 HTTP 读取） ──
+                StringBuilder sb = new StringBuilder();
+                llmHttpClient.streamCancellable(url, headers, body,
+                        rawLine -> {
+                            ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
+                            if (chunk == null || chunk.getContent() == null) {
+                                return;
+                            }
+                            sb.append(chunk.getContent());
+                            sendChunk(emitter, chunk.getContent(), stop, sendError);
+                        },
+                        stop::get
+                );
+                fullContent = sb.toString();
+            }
 
             // ── 第七步（异常路径）：客户端断开（send 失败）→ 保存部分回复并 completeWithError ──
             if (sendError.get() != null) {
@@ -442,6 +541,63 @@ public class ChatServiceImpl implements ChatService {
             sb.append("[").append(idx++).append("] ").append(hit.getContent()).append("\n");
         }
         return sb.toString();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // MCP 工具调用
+    // ════════════════════════════════════════════════════════════════
+
+    /** Agent 工具绑定信息（从 agent_tool + mcp_tool 联查）。 */
+    private record ToolBinding(Long mcpServerId, String toolName, String description,
+                               Map<String, Object> inputSchema) {}
+
+    /**
+     * 加载 Agent 绑定的全部工具：agent_tool → mcp_tool。
+     * 工具列表为空时返回空 list，调用方直接走原有流式逻辑。
+     */
+    private List<ToolBinding> loadToolBindings(Long agentId) {
+        List<AgentTool> bindings = agentToolMapper.selectList(
+                new LambdaQueryWrapper<AgentTool>().eq(AgentTool::getAgentId, agentId));
+        if (bindings.isEmpty()) return List.of();
+
+        List<ToolBinding> result = new ArrayList<>();
+        for (AgentTool at : bindings) {
+            List<McpTool> tools = mcpToolMapper.selectList(
+                    new LambdaQueryWrapper<McpTool>().eq(McpTool::getMcpServerId, at.getToolId()));
+            for (McpTool t : tools) {
+                result.add(new ToolBinding(at.getToolId(), t.getName(),
+                        t.getDescription() != null ? t.getDescription() : "", t.getInputSchema()));
+            }
+        }
+        return result;
+    }
+
+    /** 把 ToolBinding 转成 OpenAI function-calling tools 格式。 */
+    private List<Map<String, Object>> buildToolSchemas(List<ToolBinding> bindings) {
+        List<Map<String, Object>> tools = new ArrayList<>();
+        for (ToolBinding b : bindings) {
+            Map<String, Object> func = new LinkedHashMap<>();
+            func.put("name", b.toolName);
+            func.put("description", b.description);
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("type", "object");
+            params.put("properties", b.inputSchema != null
+                    ? b.inputSchema.getOrDefault("properties", Map.of()) : Map.of());
+            params.put("required", b.inputSchema != null
+                    ? b.inputSchema.getOrDefault("required", List.of()) : List.of());
+            func.put("parameters", params);
+
+            Map<String, Object> tool = new LinkedHashMap<>();
+            tool.put("type", "function");
+            tool.put("function", func);
+            tools.add(tool);
+        }
+        return tools;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castMap(Object obj) {
+        return obj instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
     }
 
     /** 用户问题向量化（与文档分块使用同一 EmbeddingClient / 同一模型）。 */

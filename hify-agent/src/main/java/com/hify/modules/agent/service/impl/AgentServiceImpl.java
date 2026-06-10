@@ -16,6 +16,7 @@ import com.hify.modules.agent.entity.AgentTool;
 import com.hify.modules.agent.mapper.AgentMapper;
 import com.hify.modules.agent.mapper.AgentToolMapper;
 import com.hify.modules.agent.service.AgentService;
+import com.hify.modules.mcp.service.McpServerService;
 import com.hify.modules.provider.service.ProviderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,7 @@ public class AgentServiceImpl implements AgentService {
     private final AgentToolMapper agentToolMapper;
     /** 跨模块依赖：通过 provider 模块的 Service 接口校验模型配置，禁止直接访问其 mapper */
     private final ProviderService providerService;
+    private final McpServerService mcpServerService;
 
     // ============================================================
     // 增删改（触发缓存失效）
@@ -115,6 +117,22 @@ public class AgentServiceImpl implements AgentService {
     @CacheEvict(cacheNames = "agent-cache", allEntries = true)
     public void updateTools(Long id, List<Long> toolIds) {
         requireExists(id);
+
+        if (toolIds != null && toolIds.size() > 10) {
+            throw new BizException(ErrorCode.PARAM_ERROR,
+                    "最多绑定 10 个工具，当前传了 " + toolIds.size() + " 个");
+        }
+
+        // 校验每个 toolId 对应的 MCP Server 存在且已启用
+        if (toolIds != null) {
+            for (Long toolId : toolIds) {
+                if (!mcpServerService.existsEnabled(toolId)) {
+                    throw new BizException(ErrorCode.MCP_SERVER_NOT_FOUND,
+                            "工具不存在或已禁用: " + toolId);
+                }
+            }
+        }
+
         // 全删全插：先清空该 agent 的所有关联，再批量插入新列表
         agentToolMapper.delete(new LambdaQueryWrapper<AgentTool>().eq(AgentTool::getAgentId, id));
         List<AgentToolBrief> tools = insertAgentTools(id, toolIds);

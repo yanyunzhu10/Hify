@@ -37,6 +37,13 @@ public enum ErrorCode {
     KNOWLEDGE_BASE_NOT_FOUND(651, "知识库不存在"),
     DOCUMENT_NOT_FOUND(652, "文档不存在"),
 
+    // 670-689 mcp
+    MCP_SERVER_NOT_FOUND(670, "MCP 服务不存在"),
+    MCP_SERVER_NAME_EXISTS(671, "MCP 服务名称已存在"),
+    MCP_SERVER_IN_USE(672, "MCP 服务被 Agent 引用，无法删除"),
+    MCP_CONNECTION_FAILED(673, "MCP 连接测试失败"),
+    MCP_TOOL_CALL_FAILED(674, "MCP 工具调用失败"),
+
     // 690-709 workflow
     WORKFLOW_NOT_FOUND(690, "工作流不存在"),
     WORKFLOW_NAME_EXISTS(691, "工作流名称已存在"),

@@ -5,13 +5,14 @@ spring:
   application:
     name: hify
 
-  # ===== 数据源（MySQL 主库） =====
+  # ===== 数据源 =====
+  # MySQL 主库：走标准 Spring Boot 路径，MyBatis-Plus 自动连接
+  # PG vector 子库：走 spring.datasource.pgvector，由 PgVectorConfig 独立创建
   datasource:
-    mysql:
-      url: jdbc:mysql://localhost:3306/hify?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
-      username: ${DB_USERNAME:root}
-      password: ${DB_PASSWORD:123456}
-      driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/hify?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
     pgvector:
       url: jdbc:postgresql://localhost:5432/hify
       username: ${PG_USERNAME:zyy}

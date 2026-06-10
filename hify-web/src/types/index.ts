@@ -66,6 +66,8 @@ export interface AgentConfig {
   enabled: number          // 0=不可用 1=可用
   toolCount: number
   tools?: AgentToolBrief[]
+  knowledgeBaseId?: number | null
+  workflowId?: number | null
   createdAt: string
   updatedAt: string
 }

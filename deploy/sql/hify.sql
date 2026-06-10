@@ -107,21 +107,31 @@ CREATE TABLE `t_mcp_server` (
 `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
 `name` varchar(64) NOT NULL COMMENT 'MCP 服务名称',
 `description` varchar(256) NOT NULL DEFAULT '' COMMENT '用途描述',
-`type` varchar(16) NOT NULL COMMENT '连接类型：stdio | sse | http',
-`command` varchar(256) NOT NULL DEFAULT '' COMMENT 'stdio：启动命令，如 uvx mcp-server-fetch',
-`url` varchar(256) NOT NULL DEFAULT '' COMMENT 'sse/http：服务地址',
-`args` varchar(1024) NOT NULL DEFAULT '[]' COMMENT 'JSON 数组：命令行参数',
-`env_vars` varchar(2048) NOT NULL DEFAULT '{}' COMMENT 'JSON 对象：注入的环境变量',
+`endpoint` varchar(500) NOT NULL DEFAULT '' COMMENT 'MCP 服务端点 URL',
 `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '启用状态',
 `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
 `updated_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
 `deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '删除标记',
-PRIMARY KEY (`id`),
-KEY `idx_mcp_server_type_deleted` (`type`,`deleted`)
+PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MCP 工具服务配置';
 
 -- ----------------------------
--- Table structure for t_model_config
+-- Table structure for t_mcp_tool
+-- ----------------------------
+DROP TABLE IF EXISTS `t_mcp_tool`;
+CREATE TABLE `t_mcp_tool` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `mcp_server_id` bigint NOT NULL COMMENT '所属 MCP Server',
+  `name` varchar(200) NOT NULL COMMENT '工具名称',
+  `description` varchar(1000) DEFAULT '' COMMENT '工具描述',
+  `input_schema` json DEFAULT NULL COMMENT 'JSON Schema 输入参数定义',
+  `created_at` timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_mcp_tool_name` (`mcp_server_id`, `name`),
+  KEY `idx_mcp_tool_server` (`mcp_server_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MCP 工具列表';
+
+-- ----------------------------
 -- ----------------------------
 DROP TABLE IF EXISTS `t_model_config`;
 CREATE TABLE `t_model_config` (

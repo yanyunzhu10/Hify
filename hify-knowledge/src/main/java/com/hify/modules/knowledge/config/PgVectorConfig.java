@@ -1,10 +1,7 @@
 package com.hify.modules.knowledge.config;
 
-import com.pgvector.PGvector;
 import com.zaxxer.hikari.HikariDataSource;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,37 +12,39 @@ import javax.sql.DataSource;
 /**
  * pgvector 数据源（PostgreSQL，仅用于向量写入与相似度检索）。
  * <p>
- * 与 MySQL 主库完全独立：Spring Boot 自动配置的 DataSource / MyBatis-Plus 走 MySQL，
- * 本配置创建独立的 DataSource + JdbcTemplate，专供 {@code ChunkRepository} 使用。
+ * 不暴露 DataSource / DataSourceProperties bean，只暴露 JdbcTemplate 和
+ * NamedParameterJdbcTemplate，避免与 Spring Boot 自动配置的 MySQL 主数据源竞争。
  * </p>
  */
 @Configuration
 public class PgVectorConfig {
 
-    @Bean
-    @ConfigurationProperties(prefix = "spring.datasource.pgvector")
-    public DataSourceProperties pgvectorDataSourceProperties() {
-        return new DataSourceProperties();
-    }
+    @Value("${spring.datasource.pgvector.url}")
+    private String url;
 
-    @Bean("pgvectorDataSource")
-    public DataSource pgvectorDataSource() {
-        return pgvectorDataSourceProperties()
-                .initializeDataSourceBuilder()
-                .type(HikariDataSource.class)
-                .build();
+    @Value("${spring.datasource.pgvector.username}")
+    private String username;
+
+    @Value("${spring.datasource.pgvector.password:}")
+    private String password;
+
+    private DataSource buildPgDs() {
+        HikariDataSource ds = new HikariDataSource();
+        ds.setJdbcUrl(url);
+        ds.setUsername(username);
+        ds.setPassword(password);
+        return ds;
     }
 
     @Bean("pgvectorJdbcTemplate")
-    public JdbcTemplate pgvectorJdbcTemplate(@Qualifier("pgvectorDataSource") DataSource pgvectorDataSource) {
-        JdbcTemplate t = new JdbcTemplate(pgvectorDataSource);
-        // 每次查询前确保 PG 驱动认识 vector 类型（连接池复用时只需注册一次，但无副作用）
+    public JdbcTemplate pgvectorJdbcTemplate() {
+        JdbcTemplate t = new JdbcTemplate(buildPgDs());
         t.setQueryTimeout(30);
         return t;
     }
 
     @Bean("pgvectorNamedJdbcTemplate")
-    public NamedParameterJdbcTemplate pgvectorNamedJdbcTemplate(@Qualifier("pgvectorDataSource") DataSource pgvectorDataSource) {
-        return new NamedParameterJdbcTemplate(pgvectorDataSource);
+    public NamedParameterJdbcTemplate pgvectorNamedJdbcTemplate() {
+        return new NamedParameterJdbcTemplate(buildPgDs());
     }
 }

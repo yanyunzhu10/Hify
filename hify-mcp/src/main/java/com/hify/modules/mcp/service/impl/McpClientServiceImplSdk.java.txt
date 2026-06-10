@@ -1,0 +1,107 @@
+/*
+ * SDK 版 MCP 客户端 — 网络通后启用。
+ *
+ * 启用步骤：
+ * 1. pom.xml 取消注释 io.modelcontextprotocol.sdk:mcp:1.1.1 依赖
+ * 2. 把本文件重命名为 McpClientServiceImpl.java（替换当前 OkHttp 版）
+ * 3. compile → 完工。上层接口 McpClientService 不变。
+ *
+ * 已知问题：HttpClientSseClientTransport 有 HttpClient 资源泄漏 —
+ * 每次 build 新实例但未正确关闭。规避：按调用创建，用完 try-with-resources。
+ */
+package com.hify.modules.mcp.service.impl;
+
+import com.hify.common.exception.BizException;
+import com.hify.common.exception.ErrorCode;
+import com.hify.modules.mcp.entity.McpServer;
+import com.hify.modules.mcp.entity.McpTool;
+import com.hify.modules.mcp.service.McpClientService;
+import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+public class McpClientServiceImpl implements McpClientService {
+
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
+    @Override
+    public List<McpTool> listTools(McpServer server) {
+        try (McpSyncClient client = buildClient(server.getEndpoint())) {
+            client.initialize();
+            McpSchema.ListToolsResult result = client.listTools();
+            List<McpTool> list = new ArrayList<>();
+            if (result != null && result.tools() != null) {
+                for (McpSchema.Tool t : result.tools()) {
+                    McpTool mt = new McpTool();
+                    mt.setName(t.name());
+                    mt.setDescription(t.description() != null ? t.description() : "");
+                    if (t.inputSchema() != null) {
+                        mt.setInputSchema(Map.of(
+                                "type", t.inputSchema().type() != null
+                                        ? t.inputSchema().type() : "object",
+                                "properties", t.inputSchema().properties() != null
+                                        ? t.inputSchema().properties() : Map.of(),
+                                "required", t.inputSchema().required() != null
+                                        ? t.inputSchema().required() : List.of()));
+                    }
+                    mt.setCreatedAt(LocalDateTime.now());
+                    list.add(mt);
+                }
+            }
+            return list;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.MCP_CONNECTION_FAILED,
+                    "获取工具列表失败 [" + server.getName() + "]: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public String callTool(McpServer server, String toolName, Map<String, Object> arguments) {
+        try (McpSyncClient client = buildClient(server.getEndpoint())) {
+            client.initialize();
+            McpSchema.CallToolResult callResult = client.callTool(
+                    new McpSchema.CallToolRequest(toolName,
+                            arguments != null ? arguments : Map.of()));
+            StringBuilder sb = new StringBuilder();
+            if (callResult != null && callResult.content() != null) {
+                for (var content : callResult.content()) {
+                    if (content instanceof McpSchema.TextContent tc) {
+                        if (!sb.isEmpty()) sb.append("\n");
+                        sb.append(tc.text());
+                    }
+                }
+            }
+            return sb.toString();
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.MCP_TOOL_CALL_FAILED,
+                    "工具调用失败 [" + toolName + "]: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 按调用创建 transport + client。
+     * HttpClientSseClientTransport 内部每次 new HttpClient 且未关闭，
+     * 故不长期持有，用完 try-with-resources 关闭。
+     */
+    private McpSyncClient buildClient(String endpoint) {
+        HttpClientSseClientTransport transport = new HttpClientSseClientTransport(endpoint);
+        return McpClient.sync(transport)
+                .requestTimeout(REQUEST_TIMEOUT)
+                .build();
+    }
+}
