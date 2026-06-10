@@ -37,9 +37,16 @@ public class KnowledgeNodeExecutor implements NodeExecutor {
     public void execute(WorkflowNode node, NodeConfig config, ExecutionContext ctx) {
         NodeConfig.KnowledgeConfig cfg = (NodeConfig.KnowledgeConfig) config;
         String nodeKey = node.getNodeKey();
-        Long kbId = cfg.knowledgeBaseId();
+        // knowledgeBaseId：节点显式指定优先 → Agent 绑定的兜底
+        Long kbId = cfg.knowledgeBaseId() != null ? cfg.knowledgeBaseId() : ctx.getAgentKnowledgeBaseId();
         int topK = cfg.topK() != null ? cfg.topK() : 3;
         double minSim = cfg.minSimilarity() != null ? cfg.minSimilarity() : 0.5;
+
+        if (kbId == null) {
+            throw new BizException(ErrorCode.WORKFLOW_NODE_CONFIG_INVALID,
+                    "KNOWLEDGE 节点 [" + node.getNodeKey() + "] 缺少 knowledgeBaseId。"
+                            + "节点 config 未指定且 Agent 未绑定知识库。");
+        }
 
         try {
             // 1) 用用户输入作为查询文本（KNOWLEDGE 节点通常查用户问题相关的内容）

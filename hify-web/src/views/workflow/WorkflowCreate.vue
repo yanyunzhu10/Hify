@@ -90,43 +90,34 @@ import type { WorkflowCreateReq } from '@/types'
 
 const router = useRouter()
 
-// 预填示例：智能客服分类工作流
+// 预填示例：LLM 节点不需要单独配置 modelConfigId —— 会继承 Agent 绑定的模型
 const EXAMPLE_JSON = JSON.stringify({
   nodes: [
-    { nodeKey: 'start',    type: 'START',     name: '开始',          outputVariable: 'userQuestion' },
-    { nodeKey: 'classify', type: 'LLM',       name: '意图识别',
-      config: { modelConfigId: 1, prompt: '分析用户意图，只返回 ORDER_QUERY 或 POLICY_QUERY 或 GENERAL：\n\n{{start.userQuestion}}' },
-      outputVariable: 'intent' },
-    { nodeKey: 'orderKB',  type: 'KNOWLEDGE', name: '查询订单FAQ',
-      config: { knowledgeBaseId: 1, topK: 3, minSimilarity: 0.5 },
-      outputVariable: 'orderKnowledge' },
-    { nodeKey: 'policyKB', type: 'KNOWLEDGE', name: '查询政策FAQ',
-      config: { knowledgeBaseId: 1, topK: 3, minSimilarity: 0.5 },
-      outputVariable: 'policyKnowledge' },
-    { nodeKey: 'cond',     type: 'CONDITION', name: '意图分支',
+    {
+      nodeKey: 'classify', type: 'LLM', name: '意图识别',
+      config: { prompt: '判断用户意图：{{start.userMessage}}。只输出 ORDER_QUERY、POLICY_QUERY 或 GENERAL。' },
+      outputVariable: 'intent'
+    },
+    {
+      nodeKey: 'cond', type: 'CONDITION', name: '是否订单',
       config: { expression: "{{classify.intent}} == 'ORDER_QUERY'" },
-      outputVariable: 'isOrder' },
-    { nodeKey: 'orderLLM', type: 'LLM',       name: '订单回复',
-      config: { modelConfigId: 1,
-        prompt: '你是客服助手，根据FAQ回答用户问题。\n参考资料：\n{{orderKB.orderKnowledge}}\n用户问题：{{start.userQuestion}}' },
-      outputVariable: 'reply' },
-    { nodeKey: 'generalLLM', type: 'LLM',      name: '通用回复',
-      config: { modelConfigId: 1,
-        prompt: '你是客服助手，回答用户问题：\n{{start.userQuestion}}' },
-      outputVariable: 'reply' },
-    { nodeKey: 'end',      type: 'END',       name: '结束',          outputVariable: 'reply' },
+      outputVariable: 'isOrder'
+    },
+    {
+      nodeKey: 'orderLLM', type: 'LLM', name: '订单回复',
+      config: { prompt: '你是客服助手。用户问题：{{start.userMessage}}。意图：{{classify.intent}}。请直接回答。' },
+      outputVariable: 'reply'
+    },
+    {
+      nodeKey: 'generalLLM', type: 'LLM', name: '通用回复',
+      config: { prompt: '你是客服助手。用户问题：{{start.userMessage}}。请直接回答。' },
+      outputVariable: 'reply'
+    },
   ],
   edges: [
-    { sourceNodeKey: 'start',     targetNodeKey: 'classify' },
-    { sourceNodeKey: 'classify',  targetNodeKey: 'cond' },
-    { sourceNodeKey: 'classify',  targetNodeKey: 'orderKB' },
-    { sourceNodeKey: 'classify',  targetNodeKey: 'policyKB' },
-    { sourceNodeKey: 'cond',      targetNodeKey: 'orderLLM',    conditionExpr: 'true' },
-    { sourceNodeKey: 'cond',      targetNodeKey: 'generalLLM',  conditionExpr: 'false' },
-    { sourceNodeKey: 'orderKB',   targetNodeKey: 'orderLLM' },
-    { sourceNodeKey: 'policyKB',  targetNodeKey: 'orderLLM' },
-    { sourceNodeKey: 'orderLLM',  targetNodeKey: 'end' },
-    { sourceNodeKey: 'generalLLM', targetNodeKey: 'end' },
+    { sourceNodeKey: 'classify', targetNodeKey: 'cond' },
+    { sourceNodeKey: 'cond', targetNodeKey: 'orderLLM', conditionExpr: 'true' },
+    { sourceNodeKey: 'cond', targetNodeKey: 'generalLLM', conditionExpr: 'false' },
   ],
 }, null, 2)
 

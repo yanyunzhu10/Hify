@@ -29,13 +29,29 @@ public class ExecutionContext {
     private final StringBuilder output = new StringBuilder();
 
     /**
+     * Agent 绑定的模型配置 id（LLM 节点 config 未显式指定时继承此值）。
+     * 工作流执行时由 ChatServiceImpl 从 Agent 传入。
+     */
+    private Long agentModelConfigId;
+
+    /**
+     * Agent 绑定的知识库 id（KNOWLEDGE 节点 config 未显式指定时继承此值）。
+     */
+    private Long agentKnowledgeBaseId;
+
+    /**
      * 创建执行上下文。
      *
-     * @param workflowRunId 本次执行的唯一 id
-     * @param userMessage   用户输入，预写入 {@code start.userMessage}，所有节点默认能读到
+     * @param workflowRunId   本次执行的唯一 id
+     * @param userMessage     用户输入，预写入 {@code start.userMessage}
+     * @param modelConfigId   Agent 绑定的模型配置 id（可空）
+     * @param knowledgeBaseId Agent 绑定的知识库 id（可空）
      */
-    public ExecutionContext(String workflowRunId, String userMessage) {
+    public ExecutionContext(String workflowRunId, String userMessage,
+                            Long modelConfigId, Long knowledgeBaseId) {
         this.workflowRunId = workflowRunId;
+        this.agentModelConfigId = modelConfigId;
+        this.agentKnowledgeBaseId = knowledgeBaseId;
         this.variables.put("start.userMessage", userMessage);
     }
 
@@ -130,6 +146,16 @@ public class ExecutionContext {
 
     public String getOutput() {
         return output.toString();
+    }
+
+    /** Agent 绑定的模型配置 id（LLM 节点兜底用） */
+    public Long getAgentModelConfigId() {
+        return agentModelConfigId;
+    }
+
+    /** Agent 绑定的知识库 id（KNOWLEDGE 节点兜底用） */
+    public Long getAgentKnowledgeBaseId() {
+        return agentKnowledgeBaseId;
     }
 
     /** 变量池大小（调试用） */

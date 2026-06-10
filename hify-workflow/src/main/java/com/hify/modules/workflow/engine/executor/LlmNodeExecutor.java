@@ -57,8 +57,14 @@ public class LlmNodeExecutor implements NodeExecutor {
             // 1) 模板变量替换
             String prompt = cfg.prompt() != null ? ctx.resolve(cfg.prompt()) : "";
 
-            // 2) 加载模型配置 + 供应商
-            ModelConfig mc = modelConfigMapper.selectById(cfg.modelConfigId());
+            // 2) 模型配置 id：节点显式指定优先 → Agent 绑定的兜底
+            Long mci = cfg.modelConfigId() != null ? cfg.modelConfigId() : ctx.getAgentModelConfigId();
+            if (mci == null) {
+                throw new BizException(ErrorCode.WORKFLOW_NODE_CONFIG_INVALID,
+                        "LLM 节点 [" + nodeKey + "] 缺少 modelConfigId。"
+                                + "节点 config 未指定且 Agent 未绑定模型配置。");
+            }
+            ModelConfig mc = modelConfigMapper.selectById(mci);
             if (mc == null) {
                 throw new BizException(ErrorCode.MODEL_CONFIG_NOT_FOUND,
                         "模型配置不存在: " + cfg.modelConfigId());

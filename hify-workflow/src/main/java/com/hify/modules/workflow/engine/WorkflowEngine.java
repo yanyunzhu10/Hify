@@ -45,12 +45,15 @@ public class WorkflowEngine {
     /**
      * 同步执行工作流。
      *
-     * @param workflowId  工作流 id
-     * @param userMessage 用户输入
+     * @param workflowId      工作流 id
+     * @param userMessage     用户输入
+     * @param modelConfigId   Agent 绑定的模型配置 id（LLM 节点 config 未指定时继承此值）
+     * @param knowledgeBaseId Agent 绑定的知识库 id（KNOWLEDGE 节点 config 未指定时继承）
      * @return 执行结果(最终输出文本)
      * @throws BizException 图结构不合法或执行失败时抛
      */
-    public String execute(Long workflowId, String userMessage) {
+    public String execute(Long workflowId, String userMessage,
+                           Long modelConfigId, Long knowledgeBaseId) {
         long startMs = System.currentTimeMillis();
 
         // ============================================================
@@ -73,7 +76,8 @@ public class WorkflowEngine {
         // ============================================================
         // ③ 创建 WorkflowRun（status=RUNNING）
         // ============================================================
-        ExecutionContext ctx = new ExecutionContext(UUID.randomUUID().toString(), userMessage);
+        ExecutionContext ctx = new ExecutionContext(UUID.randomUUID().toString(),
+                userMessage, modelConfigId, knowledgeBaseId);
         WorkflowRun run = createRun(workflowId, userMessage);
 
         // ============================================================

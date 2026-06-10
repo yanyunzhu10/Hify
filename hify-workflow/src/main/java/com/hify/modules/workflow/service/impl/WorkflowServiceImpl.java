@@ -208,7 +208,13 @@ public class WorkflowServiceImpl implements WorkflowService {
             wn.setType(n.getType().toUpperCase());
             wn.setName(n.getName());
             wn.setConfig(n.getConfig());
-            wn.setOutputVariable(n.getOutputVariable());
+            // outputVariable：优先用 NodeReq 顶层字段，若为 null 则从 config JSON 里兜底提取
+            String outVar = n.getOutputVariable();
+            if (outVar == null && n.getConfig() != null) {
+                Object cfgVar = n.getConfig().get("outputVariable");
+                if (cfgVar instanceof String s && !s.isBlank()) outVar = s;
+            }
+            wn.setOutputVariable(outVar);
             list.add(wn);
         }
         return list;

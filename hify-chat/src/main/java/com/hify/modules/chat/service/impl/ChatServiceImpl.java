@@ -200,7 +200,10 @@ public class ChatServiceImpl implements ChatService {
             if (agent.getWorkflowId() != null) {
                 log.info("触发工作流 sessionId={} workflowId={}", sessionId, agent.getWorkflowId());
                 try {
-                    String result = workflowEngine.execute(agent.getWorkflowId(), content);
+                    String result = workflowEngine.execute(agent.getWorkflowId(), content,
+                            agent.getModelConfigId(), agent.getKnowledgeBaseId());
+
+                    // 保存 assistant 消息 + 更新上下文（先落库，再推客户端）
                     messageWriteService.saveAssistantMessage(sessionId, result,
                             countTokens(result), "stop",
                             (int) (System.currentTimeMillis() - startMs));
@@ -210,7 +213,10 @@ public class ChatServiceImpl implements ChatService {
                             message("assistant", result),
                             maxTurns);
                     updateSessionTitleIfFirst(session, content);
+
+                    // 推送工作流结果（一次性完整发送 → done）
                     try {
+                        emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(result)));
                         emitter.send(SseEmitter.event().name("done").data("{}"));
                     } catch (IOException ignore) {}
                     emitter.complete();

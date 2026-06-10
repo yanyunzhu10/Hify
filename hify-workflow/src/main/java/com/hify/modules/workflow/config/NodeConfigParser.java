@@ -3,6 +3,8 @@ package com.hify.modules.workflow.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -16,6 +18,7 @@ import java.util.Map;
  */
 public final class NodeConfigParser {
 
+    private static final Logger log = LoggerFactory.getLogger(NodeConfigParser.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private NodeConfigParser() {}
@@ -27,11 +30,14 @@ public final class NodeConfigParser {
         switch (type.toUpperCase()) {
             case "START":     return new NodeConfig.StartConfig();
             case "END":       return new NodeConfig.EndConfig();
-            case "LLM":       return new NodeConfig.LlmConfig(
-                    (String) raw.get("prompt"),
-                    toLong(raw.get("modelConfigId")),
-                    toDouble(raw.get("temperature")),
-                    toInt(raw.get("maxTokens")));
+            case "LLM":
+                // 诊断日志：打印 raw config 的实际 key 和类型
+                logConfig(type, raw);
+                return new NodeConfig.LlmConfig(
+                        (String) raw.get("prompt"),
+                        toLong(raw.get("modelConfigId")),
+                        toDouble(raw.get("temperature")),
+                        toInt(raw.get("maxTokens")));
             case "CONDITION": return new NodeConfig.ConditionConfig((String) raw.get("expression"));
             case "TOOL":      return new NodeConfig.ToolConfig(
                     toLong(raw.get("toolId")),
@@ -44,13 +50,23 @@ public final class NodeConfigParser {
                             ? (Map<String, Object>) m1 : Map.of(),
                     raw.get("body") instanceof Map<?, ?> m2
                             ? (Map<String, Object>) m2 : Map.of());
-            case "KNOWLEDGE": return new NodeConfig.KnowledgeConfig(
-                    toLong(raw.get("knowledgeBaseId")),
-                    toInt(raw.get("topK")),
-                    toDouble(raw.get("minSimilarity")));
+            case "KNOWLEDGE":
+                logConfig(type, raw);
+                return new NodeConfig.KnowledgeConfig(
+                        toLong(raw.get("knowledgeBaseId")),
+                        toInt(raw.get("topK")),
+                        toDouble(raw.get("minSimilarity")));
             default: throw new BizException(ErrorCode.WORKFLOW_NODE_CONFIG_INVALID,
                     "未知节点类型: " + type);
         }
+    }
+
+    private static void logConfig(String type, Map<String, Object> raw) {
+        log.info("[NodeConfigParser] type={} keys={} modelConfigId-type={} value={}",
+                type, raw.keySet(),
+                raw.get("modelConfigId") != null
+                        ? raw.get("modelConfigId").getClass().getSimpleName() : "null",
+                raw.get("modelConfigId"));
     }
 
     /** 强类型配置 → JSON 对象（存 MySQL）。 */
