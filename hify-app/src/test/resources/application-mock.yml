@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: hify
+
+  # ===== H2 内存数据库（测试用） =====
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # ===== pgvector（测试用 H2 模拟，真实 PG 测试用 Testcontainers） =====
+  datasource-pgvector:
+    url: jdbc:h2:mem:pgvector;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+
+  # ===== Redis 测试用 embedded-redis =====
+  data:
+    redis:
+      host: localhost
+      port: 6370
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+# ===== MyBatis-Plus =====
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  type-aliases-package: com.hify.**.entity
+  global-config:
+    db-config:
+      table-prefix: t_
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+
+# ===== Hify 业务配置（测试环境） =====
+hify:
+  knowledge:
+    upload-dir: /tmp/hify-test-upload
+  llm:
+    fallback:
+      openai: ollama
+      claude: openai
+      gemini: ollama
+
+# ===== 关闭 Actuator（测试不需要） =====
+management:
+  endpoints:
+    enabled: false
+
+# ===== 测试日志 =====
+logging:
+  level:
+    com.hify: INFO
+    org.springframework.test: INFO
+    org.springframework.web: INFO
