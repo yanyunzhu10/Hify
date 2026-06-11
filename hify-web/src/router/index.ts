@@ -57,6 +57,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/workflow/WorkflowDetail.vue'),
         meta: { title: '工作流详情' },
       },
+      {
+        path: 'mcp',
+        name: 'McpServerList',
+        component: () => import('@/views/mcp/McpServerList.vue'),
+        meta: { title: 'MCP 工具' },
+      },
+      {
+        path: 'mcp/:id',
+        name: 'McpServerDetail',
+        component: () => import('@/views/mcp/McpServerDetail.vue'),
+        meta: { title: 'MCP 详情' },
+      },
     ],
   },
 ]

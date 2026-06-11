@@ -1,6 +1,8 @@
 package com.hify.modules.mcp.service;
 
 import com.hify.common.web.PageResult;
+import com.hify.modules.mcp.dto.McpDebugReq;
+import com.hify.modules.mcp.dto.McpDebugResp;
 import com.hify.modules.mcp.dto.McpServerCreateReq;
 import com.hify.modules.mcp.dto.McpServerResp;
 import com.hify.modules.mcp.dto.McpServerUpdateReq;
@@ -19,4 +21,7 @@ public interface McpServerService {
 
     /** 校验 MCP Server 是否已启用（供 agent 等模块跨模块调用） */
     boolean existsEnabled(Long serverId);
+
+    /** 调试工具调用：复用 McpClientService.callTool()，返回结果 + 耗时 */
+    McpDebugResp debug(Long id, McpDebugReq req);
 }

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -122,6 +123,18 @@ public class McpServerServiceImpl implements McpServerService {
             r.setTools(List.of());
             log.warn("MCP 连接测试失败 id={}", id, e);
         }
+        return r;
+    }
+
+    @Override
+    public McpDebugResp debug(Long id, McpDebugReq req) {
+        McpServer s = requireExists(id);
+        long start = System.currentTimeMillis();
+        Map<String, Object> args = req.getArguments() != null ? req.getArguments() : Map.of();
+        String result = clientService.callTool(s, req.getToolName(), args);
+        McpDebugResp r = new McpDebugResp();
+        r.setResult(result);
+        r.setElapsedMs((int) (System.currentTimeMillis() - start));
         return r;
     }
 
