@@ -65,7 +65,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("mock")
-@Import({com.hify.modules.chat.config.TestConfig.class})  // 导入测试配置
 @Transactional
 @DisplayName("对话引擎集成测试")
 class ChatControllerIntegrationTest {

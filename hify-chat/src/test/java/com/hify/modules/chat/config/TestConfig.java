@@ -4,14 +4,15 @@ import com.hify.modules.provider.adapter.ProviderAdapter;
 import com.hify.modules.provider.dto.ChatRequest;
 import com.hify.modules.provider.dto.ChatResponse;
 import com.hify.modules.provider.dto.ChatStreamChunk;
+import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Collections;
 
 /**
  * 测试配置类
@@ -19,36 +20,19 @@ import java.util.Collections;
  * 在 mock profile 下，使用 MockProviderAdapter 来模拟 LLM 响应
  */
 @Profile("mock")
+@Component
 public class TestConfig {
-
-    /**
-     * Mock Provider Adapter，用于测试
-     */
-    @Bean
-    @Primary
-    public ProviderAdapter mockProviderAdapter() {
-        return new MockProviderAdapter();
-    }
-
-    @Bean
-    public MockProviderAdapter mockProviderAccessor() {
-        return (MockProviderAdapter) mockProviderAdapter();
-    }
 
     /**
      * Mock Provider 实现
      */
+    @Component
     public static class MockProviderAdapter implements ProviderAdapter {
 
-        private boolean shouldReturnToolCalls = true; // 控制是否返回 tool_calls
+        private boolean shouldReturnToolCalls = true;
 
         public void setShouldReturnToolCalls(boolean shouldReturnToolCalls) {
             this.shouldReturnToolCalls = shouldReturnToolCalls;
-        }
-
-        @Override
-        public List<String> parseModels(String response) {
-            return List.of("gpt-3.5-turbo", "gpt-4");
         }
 
         @Override
@@ -63,7 +47,6 @@ public class TestConfig {
 
         @Override
         public String buildChatRequestBody(ChatRequest request) {
-            // 返回模拟的请求体
             return "{\"model\":\"gpt-3.5-turbo\",\"messages\":[],\"stream\":false}";
         }
 
@@ -104,6 +87,17 @@ public class TestConfig {
                 return chunk;
             }
             return null;
+        }
+
+        // 其他方法的简单实现
+        @Override
+        public List<ModelInfo> parseModels(String response) {
+            return List.of();
+        }
+
+        @Override
+        public int parseModelCount(String response) {
+            return 0;
         }
 
         @Override
