@@ -13,23 +13,33 @@ CREATE TABLE IF NOT EXISTS t_provider (
 
 -- Agent 表结构（测试用）
 CREATE TABLE IF NOT EXISTS t_agent (
-    id             BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    name           VARCHAR(100) NOT NULL,
-    system_prompt  TEXT         NOT NULL,
-    model_config_id BIGINT       NOT NULL,
-    enabled        SMALLINT     NOT NULL DEFAULT 1,
-    created_at     TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at     TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    deleted        SMALLINT     NOT NULL DEFAULT 0
+    id                BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name              VARCHAR(100) NOT NULL,
+    description       TEXT         NULL,
+    system_prompt     TEXT         NOT NULL,
+    model_config_id   BIGINT       NOT NULL,
+    knowledge_base_id BIGINT       DEFAULT NULL,
+    workflow_id       BIGINT       DEFAULT NULL,
+    temperature       DECIMAL(3,2) DEFAULT NULL,
+    max_tokens        INT          DEFAULT NULL,
+    max_context_turns INT          DEFAULT NULL,
+    enabled           SMALLINT     NOT NULL DEFAULT 1,
+    created_at        TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at        TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    deleted           SMALLINT     NOT NULL DEFAULT 0
 );
 
 -- ModelConfig 表结构（测试用）
 CREATE TABLE IF NOT EXISTS t_model_config (
     id            BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
     provider_id   BIGINT       NOT NULL,
-    model_name    VARCHAR(100) NOT NULL,
-    model_type    VARCHAR(50)  NOT NULL,
-    max_tokens    INT          NOT NULL,
+    name          VARCHAR(100) DEFAULT NULL,
+    model_id      VARCHAR(100) DEFAULT NULL,
+    model_name    VARCHAR(100) DEFAULT NULL,
+    model_type    VARCHAR(50)  DEFAULT NULL,
+    context_size  INT          DEFAULT NULL,
+    max_tokens    INT          DEFAULT NULL,
+    extra_params  TEXT         DEFAULT NULL,
     enabled       SMALLINT     NOT NULL DEFAULT 1,
     created_at    TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at    TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -63,36 +73,38 @@ CREATE TABLE IF NOT EXISTS t_chat_message (
 
 -- MCP Server 表结构（测试用）
 CREATE TABLE IF NOT EXISTS t_mcp_server (
-    id        BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    name      VARCHAR(100) NOT NULL,
-    base_url  VARCHAR(500) NOT NULL,
-    enabled   SMALLINT     NOT NULL DEFAULT 1,
-    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    deleted   SMALLINT     NOT NULL DEFAULT 0
+    id          BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    description TEXT         DEFAULT NULL,
+    endpoint    VARCHAR(500) DEFAULT NULL,
+    base_url    VARCHAR(500) DEFAULT NULL,
+    enabled     SMALLINT     NOT NULL DEFAULT 1,
+    created_at  TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at  TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    deleted     SMALLINT     NOT NULL DEFAULT 0
 );
 
 -- MCP Tool 表结构（测试用）
 CREATE TABLE IF NOT EXISTS t_mcp_tool (
-    id           BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    id            BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
     mcp_server_id BIGINT       NOT NULL,
-    name         VARCHAR(100) NOT NULL,
-    description  TEXT         NULL,
-    input_schema TEXT         NOT NULL,
-    enabled      SMALLINT     NOT NULL DEFAULT 1,
-    created_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    deleted      SMALLINT     NOT NULL DEFAULT 0
+    name          VARCHAR(100) NOT NULL,
+    description   TEXT         NULL,
+    input_schema  TEXT         NOT NULL,
+    enabled       SMALLINT     NOT NULL DEFAULT 1,
+    created_at    TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at    TIMESTAMP(6) DEFAULT NULL,
+    deleted       SMALLINT     NOT NULL DEFAULT 0
 );
 
 -- AgentTool 表结构（测试用）
 CREATE TABLE IF NOT EXISTS t_agent_tool (
-    id        BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    agent_id  BIGINT       NOT NULL,
-    tool_id   BIGINT       NOT NULL,
+    id         BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    agent_id   BIGINT       NOT NULL,
+    tool_id    BIGINT       NOT NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    deleted   SMALLINT     NOT NULL DEFAULT 0
+    updated_at TIMESTAMP(6) DEFAULT NULL,
+    deleted    SMALLINT     NOT NULL DEFAULT 0
 );
 
 -- 外键索引

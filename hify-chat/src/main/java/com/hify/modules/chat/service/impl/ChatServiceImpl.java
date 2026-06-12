@@ -618,6 +618,7 @@ public class ChatServiceImpl implements ChatService {
         List<ChatMessage> history = chatMessageMapper.selectList(
                 new LambdaQueryWrapper<ChatMessage>()
                         .eq(ChatMessage::getSessionId, sessionId)
+                        .orderByDesc(ChatMessage::getCreatedAt)
                         .orderByDesc(ChatMessage::getId)
                         .last("LIMIT " + (maxTurns * 2 + 1)) // +1 排除刚写入的当前 user 消息
         );

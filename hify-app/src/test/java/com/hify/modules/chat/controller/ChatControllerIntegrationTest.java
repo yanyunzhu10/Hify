@@ -2,16 +2,11 @@ package com.hify.modules.chat.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.modules.chat.dto.SendMessageReq;
-import com.hify.modules.chat.dto.SessionCreateReq;
 import com.hify.modules.chat.entity.ChatMessage;
-import com.hify.modules.chat.entity.ChatSession;
 import com.hify.modules.chat.mapper.ChatMessageMapper;
 import com.hify.modules.chat.mapper.ChatSessionMapper;
-import com.hify.modules.provider.entity.Provider;
-import com.hify.modules.provider.entity.ModelConfig;
 import com.hify.modules.provider.mapper.ProviderMapper;
 import com.hify.modules.provider.mapper.ModelConfigMapper;
-import com.hify.modules.agent.entity.Agent;
 import com.hify.modules.agent.mapper.AgentMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,22 +16,13 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;

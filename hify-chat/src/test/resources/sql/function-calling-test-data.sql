@@ -1,12 +1,21 @@
 -- Function Calling 测试数据：Agent 绑定 MCP Server 工具
 
+DELETE FROM t_chat_message;
+DELETE FROM t_chat_session;
+DELETE FROM t_agent_tool;
+DELETE FROM t_mcp_tool;
+DELETE FROM t_mcp_server;
+DELETE FROM t_agent;
+DELETE FROM t_model_config;
+DELETE FROM t_provider;
+
 -- 1. 插入 Provider
 INSERT INTO t_provider (id, name, type, base_url, auth_config, enabled, created_at, updated_at, deleted)
-VALUES (1, 'mock-openai', 'OPENAI', 'https://api.openai.com/v1', '{"apiKey":"sk-test"}', 1, NOW(), NOW(), 0);
+VALUES (1, 'mock-openai', 'MOCK', 'https://api.openai.com/v1', '{"apiKey":"sk-test"}', 1, NOW(), NOW(), 0);
 
 -- 2. 插入 ModelConfig
-INSERT INTO t_model_config (id, provider_id, model_name, model_type, max_tokens, enabled, created_at, updated_at, deleted)
-VALUES (1, 1, 'gpt-3.5-turbo', 'CHAT', 4096, 1, NOW(), NOW(), 0);
+INSERT INTO t_model_config (id, provider_id, name, model_id, model_name, model_type, max_tokens, enabled, created_at, updated_at, deleted)
+VALUES (1, 1, 'gpt-3.5-turbo', 'gpt-3.5-turbo', 'gpt-3.5-turbo', 'CHAT', 4096, 1, NOW(), NOW(), 0);
 
 -- 3. 插入 MCP Server
 INSERT INTO t_mcp_server (id, name, base_url, enabled, created_at, updated_at, deleted)
@@ -19,8 +28,8 @@ VALUES (1, 1, 'check_refund_eligibility', '检查订单是否符合退款条件'
         1, NOW(), NOW(), 0);
 
 -- 5. 插入 Agent
-INSERT INTO t_agent (id, name, system_prompt, model_config_id, enabled, created_at, updated_at, deleted)
-VALUES (1, 'refund-agent', '你是一个退款助手，可以使用工具查询订单的退款资格。', 1, 1, NOW(), NOW(), 0);
+INSERT INTO t_agent (id, name, system_prompt, model_config_id, max_context_turns, enabled, created_at, updated_at, deleted)
+VALUES (1, 'refund-agent', '你是一个退款助手，可以使用工具查询订单的退款资格。', 1, 10, 1, NOW(), NOW(), 0);
 
 -- 6. 插入 AgentTool 关联（Agent 绑定 MCP 工具）
 INSERT INTO t_agent_tool (id, agent_id, tool_id, created_at, updated_at, deleted)

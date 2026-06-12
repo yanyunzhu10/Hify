@@ -6,13 +6,13 @@ import com.hify.modules.provider.dto.ChatResponse;
 import com.hify.modules.provider.dto.ChatStreamChunk;
 import com.hify.modules.provider.dto.ModelInfo;
 import com.hify.modules.provider.entity.Provider;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 测试配置类
@@ -30,9 +30,28 @@ public class TestConfig {
     public static class MockProviderAdapter implements ProviderAdapter {
 
         private boolean shouldReturnToolCalls = true;
+        private final List<ChatRequest> receivedRequests = new CopyOnWriteArrayList<>();
 
         public void setShouldReturnToolCalls(boolean shouldReturnToolCalls) {
             this.shouldReturnToolCalls = shouldReturnToolCalls;
+        }
+
+        public List<ChatRequest> getReceivedRequests() {
+            return new ArrayList<>(receivedRequests);
+        }
+
+        public void clearReceivedRequests() {
+            receivedRequests.clear();
+        }
+
+        @Override
+        public boolean supports(String type) {
+            return "mock".equals(type);
+        }
+
+        @Override
+        public String buildUrl(String baseUrl) {
+            return baseUrl + "/models";
         }
 
         @Override
@@ -47,6 +66,7 @@ public class TestConfig {
 
         @Override
         public String buildChatRequestBody(ChatRequest request) {
+            receivedRequests.add(request);
             return "{\"model\":\"gpt-3.5-turbo\",\"messages\":[],\"stream\":false}";
         }
 
@@ -83,7 +103,7 @@ public class TestConfig {
             // 解析 SSE 流中的增量内容
             if (rawLine.contains("content")) {
                 ChatStreamChunk chunk = new ChatStreamChunk();
-                chunk.setContent("这是模拟的流式响应内容");
+                chunk.setContent("这是模拟的流式响应内容，退款条件，工具调用失败");
                 return chunk;
             }
             return null;
@@ -100,14 +120,5 @@ public class TestConfig {
             return 0;
         }
 
-        @Override
-        public String getType() {
-            return "MOCK";
-        }
-
-        @Override
-        public String getProviderType() {
-            return "MOCK";
-        }
     }
 }

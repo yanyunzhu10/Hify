@@ -10,7 +10,15 @@ import com.hify.modules.mcp.entity.McpServer;
 import com.hify.modules.mcp.entity.McpTool;
 import com.hify.modules.mcp.mapper.McpServerMapper;
 import com.hify.modules.mcp.mapper.McpToolMapper;
+import com.hify.common.http.EmbeddingClient;
+import com.hify.common.http.LlmHttpClient;
+import com.hify.modules.chat.service.ChatContextCache;
+import com.hify.modules.knowledge.repository.ChunkHit;
+import com.hify.modules.knowledge.repository.ChunkRepository;
 import com.hify.modules.mcp.service.McpClientService;
+import com.hify.modules.provider.adapter.ProviderAdapter;
+import com.hify.modules.provider.adapter.ProviderAdapterFactory;
+import com.hify.modules.provider.dto.ChatRequest;
 import com.hify.modules.provider.entity.Provider;
 import com.hify.modules.provider.entity.ModelConfig;
 import com.hify.modules.provider.mapper.ProviderMapper;
@@ -19,24 +27,29 @@ import com.hify.modules.agent.entity.Agent;
 import com.hify.modules.agent.entity.AgentTool;
 import com.hify.modules.agent.mapper.AgentMapper;
 import com.hify.modules.agent.mapper.AgentToolMapper;
+import com.hify.common.config.MybatisPlusConfig;
+import com.hify.common.config.ThreadPoolConfig;
+import com.hify.modules.workflow.engine.WorkflowEngine;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mybatis.spring.annotation.MapperScan;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -62,12 +75,107 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 1. 完整对话链路：创建会话 → 发送消息 → 验证 SSE 流 → 验证数据库
  * 2. Function Calling 两轮链路：工具调用 → 验证工具执行 → 验证最终回答
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = {
+        ChatController.class,
+        com.hify.modules.chat.service.impl.ChatServiceImpl.class,
+        com.hify.modules.chat.service.ChatMessageWriteService.class,
+        com.hify.modules.chat.config.TestConfig.class,
+        ThreadPoolConfig.class,
+        MybatisPlusConfig.class,
+        ChatControllerIntegrationTest.MockDependencyConfig.class
+}, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @ActiveProfiles("mock")
-@Transactional
+@EnableAutoConfiguration
+@MapperScan("com.hify.**.mapper")
 @DisplayName("对话引擎集成测试")
 class ChatControllerIntegrationTest {
+
+    @TestConfiguration
+    static class MockDependencyConfig {
+
+        @Bean
+        LlmHttpClient llmHttpClient() {
+            return new LlmHttpClient() {
+                @Override
+                public String post(String url, Map<String, String> headers, String body) {
+                    return "{\"mock\":\"refund_eligibility\"}";
+                }
+
+                @Override
+                public boolean streamCancellable(String url, Map<String, String> headers, String body,
+                                                 java.util.function.Consumer<String> callback,
+                                                 java.util.function.BooleanSupplier shouldCancel) {
+                    callback.accept("data: {\"content\":\"mock\"}");
+                    return true;
+                }
+            };
+        }
+
+        @Bean
+        ChatContextCache contextCache() {
+            return new ChatContextCache(null) {
+                @Override
+                public List<ChatRequest.Message> getWindow(Long sessionId) {
+                    return null;
+                }
+
+                @Override
+                public void warmUp(Long sessionId, List<ChatRequest.Message> messages) {
+                }
+
+                @Override
+                public void appendTurn(Long sessionId, ChatRequest.Message userMsg,
+                                       ChatRequest.Message assistantMsg, int maxTurns) {
+                }
+
+                @Override
+                public void evict(Long sessionId) {
+                }
+            };
+        }
+
+        @Bean
+        ChunkRepository chunkRepository() {
+            return new ChunkRepository(null) {
+                @Override
+                public List<ChunkHit> searchNearest(float[] queryVec, Long knowledgeBaseId, int topK) {
+                    return List.of();
+                }
+            };
+        }
+
+        @Bean
+        EmbeddingClient embeddingClient() {
+            return new EmbeddingClient(null, null, null) {
+                @Override
+                public float[] embed(String text) {
+                    return new float[0];
+                }
+            };
+        }
+
+        @Bean
+        WorkflowEngine workflowEngine() {
+            return new WorkflowEngine(null, null, null, null, null) {
+                @Override
+                public String execute(Long workflowId, String userMessage,
+                                      Long modelConfigId, Long knowledgeBaseId) {
+                    return "";
+                }
+            };
+        }
+
+        @Bean
+        ProviderAdapterFactory providerAdapterFactory(ProviderAdapter adapter) {
+            return new ProviderAdapterFactory(List.of(adapter));
+        }
+
+        @Bean
+        McpClientService mcpClientService() {
+            return mock(McpClientService.class);
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -102,8 +210,25 @@ class ChatControllerIntegrationTest {
     @Autowired
     private com.hify.modules.chat.config.TestConfig.MockProviderAdapter mockProviderAdapter;
 
+    @Autowired
+    private LlmHttpClient llmHttpClient;
+
+    @Autowired
+    private ChatContextCache contextCache;
+
+    @Autowired
+    private ChunkRepository chunkRepository;
+
+    @Autowired
+    private EmbeddingClient embeddingClient;
+
+    @Autowired
+    private WorkflowEngine workflowEngine;
+
     // 使用简化的模拟，不依赖实际的 McpClientService
-    private McpClientService mcpClientService = mock(McpClientService.class);
+    @Autowired
+    private McpClientService mcpClientService;
+
 
     @Captor
     private ArgumentCaptor<McpServer> serverCaptor;
@@ -123,21 +248,15 @@ class ChatControllerIntegrationTest {
         @DisplayName("普通问答：从会话创建到 SSE 消息的完整流程")
         void should_complete_conversation_flow() throws Exception {
             // Given - SQL 已插入 provider + model_config + agent + chat_session 数据
+            mockProviderAdapter.clearReceivedRequests();
             Long sessionId = 1L;
             String userMessage = "你好";
 
             // When - 发送消息
-            SendMessageReq request = new SendMessageReq();
-            request.setContent(userMessage);
-            MvcResult result = mockMvc.perform(post("/api/v1/chat/sessions/{id}/messages", sessionId)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andDo(print())
-                    .andExpect(status().isOk())
-                    .andReturn();
+            MvcResult result = performSendMessage(sessionId, userMessage);
 
             MockHttpServletResponse response = result.getResponse();
-            assertThat(response.getContentType()).isEqualTo("text/event-stream");
+            assertThat(response.getContentType()).startsWith("text/event-stream");
             assertThat(response.getContentAsString()).isNotEmpty();
 
             // Then - 收集 SSE 事件流
@@ -175,6 +294,26 @@ class ChatControllerIntegrationTest {
             // 验证 ④ assistant 消息的 content 与所有 delta 事件的 content 拼接结果一致
             assertThat(assistantMsg.getContent()).isEqualTo(deltaContent);
         }
+
+        @Test
+        @Sql(scripts = {"/sql/schema-h2.sql", "/sql/chat-test-data.sql"})
+        @DisplayName("对话上下文：第三轮请求携带前两轮历史且按时间升序")
+        void should_pass_multi_turn_context_to_provider_in_chronological_order() throws Exception {
+            mockProviderAdapter.clearReceivedRequests();
+            Long sessionId = 1L;
+
+            sendMessage(sessionId, "第一条");
+            sendMessage(sessionId, "第二条");
+            sendMessage(sessionId, "第三条");
+
+            List<ChatRequest> requests = mockProviderAdapter.getReceivedRequests();
+            assertThat(requests).hasSize(3);
+
+            List<ChatRequest.Message> messages = requests.get(2).getMessages();
+            assertThat(messages).extracting(ChatRequest.Message::getContent)
+                    .containsSubsequence("第一条", "第二条", "第三条");
+            assertThat(messages.get(messages.size() - 1).getContent()).isEqualTo("第三条");
+        }
     }
 
     @Nested
@@ -196,17 +335,10 @@ class ChatControllerIntegrationTest {
                     .thenReturn("该订单符合退款条件，可以申请退款");
 
             // When - 发送消息
-            SendMessageReq request = new SendMessageReq();
-            request.setContent(userMessage);
-            MvcResult result = mockMvc.perform(post("/api/v1/chat/sessions/{id}/messages", sessionId)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andDo(print())
-                    .andExpect(status().isOk())
-                    .andReturn();
+            MvcResult result = performSendMessage(sessionId, userMessage);
 
             MockHttpServletResponse response = result.getResponse();
-            assertThat(response.getContentType()).isEqualTo("text/event-stream");
+            assertThat(response.getContentType()).startsWith("text/event-stream");
 
             // Then - 收集 SSE 事件流
             String sseContent = response.getContentAsString();
@@ -270,17 +402,10 @@ class ChatControllerIntegrationTest {
                     .thenThrow(new RuntimeException("工具调用失败：连接超时"));
 
             // When - 发送消息
-            SendMessageReq request = new SendMessageReq();
-            request.setContent(userMessage);
-            MvcResult result = mockMvc.perform(post("/api/v1/chat/sessions/{id}/messages", sessionId)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andDo(print())
-                    .andExpect(status().isOk())
-                    .andReturn();
+            MvcResult result = performSendMessage(sessionId, userMessage);
 
             MockHttpServletResponse response = result.getResponse();
-            assertThat(response.getContentType()).isEqualTo("text/event-stream");
+            assertThat(response.getContentType()).startsWith("text/event-stream");
 
             // Then - 收集 SSE 事件流
             String sseContent = response.getContentAsString();
@@ -343,6 +468,27 @@ class ChatControllerIntegrationTest {
         }
     }
 
+    private String sendMessage(Long sessionId, String content) throws Exception {
+        return performSendMessage(sessionId, content).getResponse().getContentAsString();
+    }
+
+    private MvcResult performSendMessage(Long sessionId, String content) throws Exception {
+        SendMessageReq request = new SendMessageReq();
+        request.setContent(content);
+        MvcResult result = mockMvc.perform(post("/api/v1/chat/sessions/{id}/messages", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andReturn();
+        if (result.getRequest().isAsyncStarted()) {
+            result = mockMvc.perform(asyncDispatch(result))
+                    .andExpect(status().isOk())
+                    .andReturn();
+        }
+        result.getResponse().setCharacterEncoding(StandardCharsets.UTF_8.name());
+        return result;
+    }
+
     /**
      * 从 SSE 流中收集所有增量内容
      */
@@ -360,8 +506,8 @@ class ChatControllerIntegrationTest {
                 // 提取 JSON 字符串
                 String[] lines = event.split("\n");
                 for (String line : lines) {
-                    if (line.startsWith("data: ")) {
-                        String jsonData = line.substring(6); // 移除 "data: "
+                    if (line.startsWith("data:")) {
+                        String jsonData = line.substring(5).trim(); // 移除 "data:"
                         try {
                             // 去除 JSON 引号
                             String content = objectMapper.readTree(jsonData).asText();
