@@ -42,7 +42,9 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <p6spy.version>3.9.1</p6spy.version>
         <guava.version>33.3.1-jre</guava.version>
+        <lombok.version>1.18.42</lombok.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
+        <opentelemetry.version>1.45.0</opentelemetry.version>
     </properties>
 
     <dependencyManagement>
@@ -175,6 +177,11 @@
                 <artifactId>logstash-logback-encoder</artifactId>
                 <version>${logstash-logback-encoder.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-sdk-trace</artifactId>
+                <version>${opentelemetry.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -187,6 +194,13 @@
                     <configuration>
                         <!-- Keep parameter names for Spring MVC binding -->
                         <parameters>true</parameters>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
             </plugins>

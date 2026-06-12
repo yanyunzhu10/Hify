@@ -1,10 +1,5 @@
 package com.hify.common.exception;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
-@Getter
-@RequiredArgsConstructor
 public enum ErrorCode {
 
     // 4xx - 客户端错误
@@ -52,4 +47,17 @@ public enum ErrorCode {
 
     private final int code;
     private final String message;
+
+    ErrorCode(int code, String message) {
+        this.code = code;
+        this.message = message;
+    }
+
+    public int getCode() {
+        return code;
+    }
+
+    public String getMessage() {
+        return message;
+    }
 }

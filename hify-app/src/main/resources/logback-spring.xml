@@ -19,6 +19,36 @@
         </encoder>
     </appender>
 
+    <!-- ===== 控制台（生产：JSON 结构化，stdout 由 K8s 采集） ===== -->
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>timestamp</fieldName>
+                    <timeZone>Asia/Shanghai</timeZone>
+                </timestamp>
+                <logLevel>
+                    <fieldName>level</fieldName>
+                </logLevel>
+                <mdc>
+                    <includeMdcKeyName>traceId</includeMdcKeyName>
+                </mdc>
+                <threadName>
+                    <fieldName>thread</fieldName>
+                </threadName>
+                <loggerName>
+                    <fieldName>logger</fieldName>
+                </loggerName>
+                <message>
+                    <fieldName>message</fieldName>
+                </message>
+                <stackTrace>
+                    <fieldName>stack_trace</fieldName>
+                </stackTrace>
+            </providers>
+        </encoder>
+    </appender>
+
     <!-- ===== 文件（开发：纯文本） ===== -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/${appName}.log</file>
@@ -33,22 +63,7 @@
         </encoder>
     </appender>
 
-    <!-- ===== 文件（生产：JSON 结构化） ===== -->
-    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_DIR}/${appName}.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_DIR}/${appName}.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>2GB</totalSizeCap>
-        </rollingPolicy>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeMdcKeyName>traceId</includeMdcKeyName>
-            <customFields>{"app":"${appName}"}</customFields>
-            <timeZone>Asia/Shanghai</timeZone>
-        </encoder>
-    </appender>
-
-    <!-- ===== 错误日志单独收集 ===== -->
+    <!-- ===== 错误日志单独收集（开发） ===== -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/${appName}-error.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
@@ -66,7 +81,7 @@
         </encoder>
     </appender>
 
-    <!-- ===== LLM 调用专项日志 ===== -->
+    <!-- ===== LLM 调用专项日志（开发） ===== -->
     <appender name="LLM_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/${appName}-llm.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -79,13 +94,11 @@
         </encoder>
     </appender>
 
-    <logger name="com.hify.modules.provider" level="INFO" additivity="false">
-        <appender-ref ref="LLM_FILE"/>
-        <appender-ref ref="FILE"/>
-    </logger>
-
-    <!-- ===== 各环境根日志 ===== -->
     <springProfile name="dev">
+        <logger name="com.hify.modules.provider" level="INFO" additivity="false">
+            <appender-ref ref="LLM_FILE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
         <root level="DEBUG">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="FILE"/>
@@ -95,8 +108,7 @@
 
     <springProfile name="prod">
         <root level="INFO">
-            <appender-ref ref="JSON_FILE"/>
-            <appender-ref ref="ERROR_FILE"/>
+            <appender-ref ref="JSON_CONSOLE"/>
         </root>
     </springProfile>
 

@@ -68,6 +68,16 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-spring-boot3</artifactId>
         </dependency>
+        <!-- Micrometer：业务指标埋点 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+        <!-- OpenTelemetry：生成标准 traceId，一期不接 exporter -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-trace</artifactId>
+        </dependency>
         <!-- Logstash JSON encoder：生产环境结构化日志 -->
         <dependency>
             <groupId>net.logstash.logback</groupId>

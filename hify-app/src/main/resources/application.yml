@@ -133,13 +133,18 @@ hify:
 
 # ===== Actuator =====
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,prometheus
   endpoint:
     health:
       show-details: always
+  metrics:
+    tags:
+      application: hify
 
 # ===== 日志 =====
 logging:

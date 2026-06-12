@@ -8,6 +8,7 @@ import com.hify.common.exception.ErrorCode;
 import com.hify.common.exception.LlmApiException;
 import com.hify.common.http.EmbeddingClient;
 import com.hify.common.http.LlmHttpClient;
+import com.hify.common.metrics.HifyMetrics;
 import com.hify.modules.agent.entity.Agent;
 import com.hify.modules.agent.entity.AgentTool;
 import com.hify.modules.agent.mapper.AgentMapper;
@@ -47,6 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -96,6 +98,7 @@ public class ChatServiceImpl implements ChatService {
     private final McpServerMapper mcpServerMapper;
     private final McpToolMapper mcpToolMapper;
     private final McpClientService mcpClientService;
+    private final HifyMetrics hifyMetrics;
 
     /** 流式 SSE 专用线程池（AbortPolicy：满载抛 RejectedExecutionException，上层转 503）。 */
     @Qualifier("llmStreamExecutor")
@@ -166,6 +169,8 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public SseEmitter sendMessage(Long sessionId, String content) {
+        log.info("Chat request received sessionId={} contentLength={}",
+                sessionId, content == null ? 0 : content.length());
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         // 停止标志：被 onTimeout / 客户端断开 / 连接错误置位，作为 streamCancellable 的取消信号
         AtomicBoolean stop = new AtomicBoolean(false);
@@ -196,12 +201,15 @@ public class ChatServiceImpl implements ChatService {
     private void doStream(Long sessionId, String content, SseEmitter emitter, AtomicBoolean stop) {
         long startMs = System.currentTimeMillis();
         String fullContent = "";
+        String agentIdTag = "unknown";
+        String chatOutcome = "error";
         // 记录 send 抛出的 IOException（客户端断开）：循环结束后据此 completeWithError
         AtomicReference<IOException> sendError = new AtomicReference<>();
 
         try {
             // ── 第一步：会话必须已存在，反查 agentId ──
             ChatSession session = requireSession(sessionId);
+            agentIdTag = String.valueOf(session.getAgentId());
 
             // ── 第二步：保存用户消息（独立事务），并据首条消息生成会话标题 ──
             messageWriteService.saveUserMessage(sessionId, content);
@@ -233,6 +241,7 @@ public class ChatServiceImpl implements ChatService {
                         emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(result)));
                         emitter.send(SseEmitter.event().name("done").data("{}"));
                     } catch (IOException ignore) {}
+                    chatOutcome = "workflow_success";
                     emitter.complete();
                     return;
                 } catch (BizException e) {
@@ -245,6 +254,7 @@ public class ChatServiceImpl implements ChatService {
                         emitter.send(SseEmitter.event().data(errMsg));
                         emitter.send(SseEmitter.event().name("done").data("{}"));
                     } catch (IOException ignore) {}
+                    chatOutcome = "workflow_error";
                     emitter.complete();
                     return;
                 }
@@ -275,7 +285,22 @@ public class ChatServiceImpl implements ChatService {
                 String body = adapter.buildChatRequestBody(chatReq);
 
                 // 第一次调用 LLM（非流式），判断是否需要调工具
-                String firstResp = llmHttpClient.post(url, headers, body);
+                long firstLlmStartMs = System.currentTimeMillis();
+                log.info("LLM call start sessionId={} provider={} model={} stream=false tools=true",
+                        sessionId, provider.getType(), modelConfig.getModelId());
+                String firstResp;
+                try {
+                    firstResp = llmHttpClient.post(url, headers, body);
+                    recordLlmCall(provider.getType(), modelConfig.getModelId(), "false",
+                            "tool_detection", "success", firstLlmStartMs);
+                } catch (Exception e) {
+                    recordLlmCall(provider.getType(), modelConfig.getModelId(), "false",
+                            "tool_detection", "failure", firstLlmStartMs);
+                    throw e;
+                }
+                log.info("LLM call end sessionId={} provider={} model={} stream=false costMs={}",
+                        sessionId, provider.getType(), modelConfig.getModelId(),
+                        System.currentTimeMillis() - firstLlmStartMs);
                 ChatResponse chatResp = adapter.parseChatResponse(firstResp);
                 List<Map<String, Object>> toolCalls = chatResp != null ? chatResp.getToolCalls() : null;
 
@@ -294,7 +319,8 @@ public class ChatServiceImpl implements ChatService {
                         Map<String, Object> func = castMap(tc.get("function"));
                         String toolName = func != null ? (String) func.getOrDefault("name", "") : "";
                         String argsJson = func != null ? (String) func.getOrDefault("arguments", "{}") : "{}";
-                        log.info("[ToolCall] sessionId={} tool={} callId={}", sessionId, toolName, callId);
+                        long toolStartMs = System.currentTimeMillis();
+                        log.info("[ToolCall] start sessionId={} tool={} callId={}", sessionId, toolName, callId);
 
                         String toolResult;
                         try {
@@ -307,8 +333,11 @@ public class ChatServiceImpl implements ChatService {
                                         mcpServerMapper.selectById(binding.mcpServerId), toolName,
                                         objectMapper.readValue(argsJson, Map.class));
                             }
+                            log.info("[ToolCall] end sessionId={} tool={} callId={} success=true costMs={}",
+                                    sessionId, toolName, callId, System.currentTimeMillis() - toolStartMs);
                         } catch (Exception e) {
-                            log.warn("[ToolCall] 工具执行失败 tool={}", toolName, e);
+                            log.warn("[ToolCall] error sessionId={} tool={} callId={} costMs={}",
+                                    sessionId, toolName, callId, System.currentTimeMillis() - toolStartMs, e);
                             toolResult = "工具调用失败：" + e.getMessage();
                         }
                         // 追加 tool 消息
@@ -325,20 +354,37 @@ public class ChatServiceImpl implements ChatService {
                     chatReq.setStream(true);
                     String secondBody = adapter.buildChatRequestBody(chatReq);
 
+                    long secondLlmStartMs = System.currentTimeMillis();
+                    log.info("LLM call start sessionId={} provider={} model={} stream=true tools=false phase=tool_result",
+                            sessionId, provider.getType(), modelConfig.getModelId());
                     StringBuilder sb = new StringBuilder();
-                    llmHttpClient.streamCancellable(url, headers, secondBody,
-                            rawLine -> {
-                                ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
-                                if (chunk == null || chunk.getContent() == null) return;
-                                sb.append(chunk.getContent());
-                                sendChunk(emitter, chunk.getContent(), stop, sendError);
-                            },
-                            stop::get
-                    );
+                    try {
+                        llmHttpClient.streamCancellable(url, headers, secondBody,
+                                rawLine -> {
+                                    ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
+                                    if (chunk == null || chunk.getContent() == null) return;
+                                    sb.append(chunk.getContent());
+                                    sendChunk(emitter, chunk.getContent(), stop, sendError);
+                                },
+                                stop::get
+                        );
+                        recordLlmCall(provider.getType(), modelConfig.getModelId(), "true",
+                                "tool_result", "success", secondLlmStartMs);
+                    } catch (Exception e) {
+                        recordLlmCall(provider.getType(), modelConfig.getModelId(), "true",
+                                "tool_result", "failure", secondLlmStartMs);
+                        throw e;
+                    }
                     fullContent = sb.toString();
+                    log.info("LLM call end sessionId={} provider={} model={} stream=true costMs={} responseLength={}",
+                            sessionId, provider.getType(), modelConfig.getModelId(),
+                            System.currentTimeMillis() - secondLlmStartMs, fullContent.length());
                 } else {
                     // 第一次直接返回了内容（不需要调工具），推送即可
                     fullContent = chatResp != null ? chatResp.getContent() : "";
+                    log.info("LLM call end sessionId={} provider={} model={} stream=false costMs={} responseLength={}",
+                            sessionId, provider.getType(), modelConfig.getModelId(),
+                            System.currentTimeMillis() - firstLlmStartMs, fullContent == null ? 0 : fullContent.length());
                     if (fullContent != null && !fullContent.isEmpty()) {
                         try {
                             emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(fullContent)));
@@ -351,25 +397,40 @@ public class ChatServiceImpl implements ChatService {
                 String body = adapter.buildChatRequestBody(chatReq);
 
                 // ── 第六步：流式调 LLM（stop 为取消信号，置位即中断 HTTP 读取） ──
+                long llmStartMs = System.currentTimeMillis();
+                log.info("LLM call start sessionId={} provider={} model={} stream=true tools=false",
+                        sessionId, provider.getType(), modelConfig.getModelId());
                 StringBuilder sb = new StringBuilder();
-                llmHttpClient.streamCancellable(url, headers, body,
-                        rawLine -> {
-                            ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
-                            if (chunk == null || chunk.getContent() == null) {
-                                return;
-                            }
-                            sb.append(chunk.getContent());
-                            sendChunk(emitter, chunk.getContent(), stop, sendError);
-                        },
-                        stop::get
-                );
+                try {
+                    llmHttpClient.streamCancellable(url, headers, body,
+                            rawLine -> {
+                                ChatStreamChunk chunk = adapter.parseStreamLine(rawLine);
+                                if (chunk == null || chunk.getContent() == null) {
+                                    return;
+                                }
+                                sb.append(chunk.getContent());
+                                sendChunk(emitter, chunk.getContent(), stop, sendError);
+                            },
+                            stop::get
+                    );
+                    recordLlmCall(provider.getType(), modelConfig.getModelId(), "true",
+                            "direct", "success", llmStartMs);
+                } catch (Exception e) {
+                    recordLlmCall(provider.getType(), modelConfig.getModelId(), "true",
+                            "direct", "failure", llmStartMs);
+                    throw e;
+                }
                 fullContent = sb.toString();
+                log.info("LLM call end sessionId={} provider={} model={} stream=true costMs={} responseLength={}",
+                        sessionId, provider.getType(), modelConfig.getModelId(),
+                        System.currentTimeMillis() - llmStartMs, fullContent.length());
             }
 
             // ── 第七步（异常路径）：客户端断开（send 失败）→ 保存部分回复并 completeWithError ──
             if (sendError.get() != null) {
                 savePartialReply(sessionId, fullContent, "error",
                         (int) (System.currentTimeMillis() - startMs));
+                chatOutcome = "cancelled";
                 emitter.completeWithError(sendError.get());
                 return;
             }
@@ -378,6 +439,7 @@ public class ChatServiceImpl implements ChatService {
             if (stop.get()) {
                 savePartialReply(sessionId, fullContent, "length",
                         (int) (System.currentTimeMillis() - startMs));
+                chatOutcome = "timeout_or_cancelled";
                 return;
             }
 
@@ -401,6 +463,7 @@ public class ChatServiceImpl implements ChatService {
             } catch (IOException ignore) {
                 // 客户端在收尾时已断开，无需处理
             }
+            chatOutcome = "success";
             emitter.complete();
 
         } catch (LlmApiException e) {
@@ -413,6 +476,9 @@ public class ChatServiceImpl implements ChatService {
             savePartialReply(sessionId, fullContent, "error",
                     (int) (System.currentTimeMillis() - startMs));
             emitter.completeWithError(e);
+        } finally {
+            hifyMetrics.recordChatRequest(agentIdTag, chatOutcome,
+                    Duration.ofMillis(System.currentTimeMillis() - startMs));
         }
     }
 
@@ -667,6 +733,12 @@ public class ChatServiceImpl implements ChatService {
     // ════════════════════════════════════════════════════════════════
     // 辅助
     // ════════════════════════════════════════════════════════════════
+
+    private void recordLlmCall(String provider, String model, String stream,
+                               String phase, String outcome, long startMs) {
+        hifyMetrics.recordLlmCall(provider, model, stream, phase, outcome,
+                Duration.ofMillis(System.currentTimeMillis() - startMs));
+    }
 
     /**
      * 推送一个增量片段。每个片段以 JSON 字符串字面量发送（{@code data:"...\n..."}），

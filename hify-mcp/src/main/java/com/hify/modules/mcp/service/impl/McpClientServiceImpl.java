@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
+import com.hify.common.metrics.HifyMetrics;
 import com.hify.modules.mcp.entity.McpServer;
 import com.hify.modules.mcp.entity.McpTool;
 import com.hify.modules.mcp.service.McpClientService;
@@ -29,6 +30,12 @@ import java.util.*;
 @Slf4j
 @Service
 public class McpClientServiceImpl implements McpClientService {
+
+    private final HifyMetrics hifyMetrics;
+
+    public McpClientServiceImpl(HifyMetrics hifyMetrics) {
+        this.hifyMetrics = hifyMetrics;
+    }
 
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -70,6 +77,8 @@ public class McpClientServiceImpl implements McpClientService {
 
     @Override
     public String callTool(McpServer server, String toolName, Map<String, Object> arguments) {
+        long startMs = System.currentTimeMillis();
+        String outcome = "failure";
         try {
             String sessionId = initialize(server.getEndpoint());
             Map<String, Object> params = new LinkedHashMap<>();
@@ -89,16 +98,27 @@ public class McpClientServiceImpl implements McpClientService {
                     }
                 }
             }
+            outcome = "success";
             return sb.toString();
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
             throw new BizException(ErrorCode.MCP_TOOL_CALL_FAILED,
                     "工具调用失败 [" + toolName + "]: " + e.getMessage(), e);
+        } finally {
+            hifyMetrics.recordMcpToolCall(serverId(server), toolName, outcome,
+                    Duration.ofMillis(System.currentTimeMillis() - startMs));
         }
     }
 
     // ============ JSON-RPC helpers ============
+
+    private String serverId(McpServer server) {
+        if (server == null || server.getId() == null) {
+            return "unknown";
+        }
+        return String.valueOf(server.getId());
+    }
 
     private Map<String, Object> rpcReq(String method, int id, Map<String, Object> params) {
         Map<String, Object> req = new LinkedHashMap<>();

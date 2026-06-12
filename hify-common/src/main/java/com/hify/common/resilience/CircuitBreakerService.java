@@ -3,6 +3,7 @@ package com.hify.common.resilience;
 import com.hify.common.exception.BizException;
 import com.hify.common.exception.ErrorCode;
 import com.hify.common.exception.LlmApiException;
+import com.hify.common.metrics.CircuitBreakerMetricsBinder;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -31,10 +32,13 @@ public class CircuitBreakerService {
 
     private final CircuitBreakerRegistry registry;
     private final RetryProperties retryProperties;
+    private final CircuitBreakerMetricsBinder circuitBreakerMetricsBinder;
 
     /** 获取或创建 providerName 对应的熔断器（不存在时按 default 配置创建） */
     public CircuitBreaker get(String providerName) {
-        return registry.circuitBreaker(providerName);
+        CircuitBreaker circuitBreaker = registry.circuitBreaker(providerName);
+        circuitBreakerMetricsBinder.bind(providerName, circuitBreaker);
+        return circuitBreaker;
     }
 
     /** 执行带熔断 + 自定义重试的同步调用 */
