@@ -1,0 +1,113 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: hify
+
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
+
+  web:
+    resources:
+      static-locations:
+        - file:./frontend/
+        - classpath:/static/
+
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/hify?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true}
+    username: ${MYSQL_USERNAME:${DB_USERNAME:root}}
+    password: ${MYSQL_PASSWORD:${DB_PASSWORD:123456}}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    pgvector:
+      url: ${PGVECTOR_URL:jdbc:postgresql://127.0.0.1:5432/hify}
+      username: ${PGVECTOR_USERNAME:${PG_USERNAME:postgres}}
+      password: ${PGVECTOR_PASSWORD:${PG_PASSWORD:}}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:16}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:2}
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:12MB}
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  type-aliases-package: com.hify.**.entity
+  global-config:
+    db-config:
+      table-prefix: t_
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    default-enum-type-handler: org.apache.ibatis.type.EnumOrdinalTypeHandler
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+
+hify:
+  knowledge:
+    upload-dir: ${HIFY_UPLOAD_DIR:./upload}
+  embedding:
+    enabled: ${EMBEDDING_ENABLED:false}
+    base-url: ${EMBEDDING_BASE_URL:}
+    api-key: ${EMBEDDING_API_KEY:}
+    model: ${EMBEDDING_MODEL:BAAI/bge-m3}
+    dimensions: ${EMBEDDING_DIMENSIONS:1024}
+  llm:
+    fallback:
+      openai: ${LLM_FALLBACK_OPENAI:ollama}
+      claude: ${LLM_FALLBACK_CLAUDE:openai}
+      gemini: ${LLM_FALLBACK_GEMINI:ollama}
+  async:
+    llm-pool:
+      core-size: ${LLM_POOL_CORE_SIZE:20}
+      max-size: ${LLM_POOL_MAX_SIZE:50}
+      queue-capacity: ${LLM_POOL_QUEUE_CAPACITY:100}
+    llm-stream-pool:
+      core-size: ${LLM_STREAM_POOL_CORE_SIZE:30}
+      max-size: ${LLM_STREAM_POOL_MAX_SIZE:80}
+      queue-capacity: ${LLM_STREAM_POOL_QUEUE_CAPACITY:50}
+  resilience:
+    retry:
+      timeout:
+        max-attempts: ${LLM_RETRY_TIMEOUT_MAX_ATTEMPTS:2}
+        interval: ${LLM_RETRY_TIMEOUT_INTERVAL:1s}
+      rate-limit:
+        backoffs: [2s, 4s]
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  config: classpath:logback-spring.xml

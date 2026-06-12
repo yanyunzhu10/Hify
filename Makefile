@@ -45,12 +45,23 @@ clean-frontend:
 # ── 打包 ─────────────────────────────────────────────────────────────
 
 package: build
-	@echo ">>> 打包 $(TARBALL)..."
-	@rm -rf $(STAGE_DIR) && mkdir -p $(STAGE_DIR)/hify
-	@cp $(JAR) $(STAGE_DIR)/hify/hify-app.jar
-	@cp -r hify-web/dist $(STAGE_DIR)/hify/frontend
-	@cp start.sh stop.sh Makefile $(STAGE_DIR)/hify/
-	@cp -r deploy $(STAGE_DIR)/hify/
+	@echo ">>> 打包本地部署包 $(TARBALL)..."
+	@rm -rf $(STAGE_DIR) $(TARBALL)
+	@mkdir -p $(STAGE_DIR)/hify/bin $(STAGE_DIR)/hify/lib $(STAGE_DIR)/hify/config \
+		$(STAGE_DIR)/hify/deploy $(STAGE_DIR)/hify/logs $(STAGE_DIR)/hify/run
+	@test -f "$(JAR)" || (echo "Missing jar: $(JAR)" && exit 1)
+	@test -f "hify-web/dist/index.html" || (echo "Missing frontend dist; run make build-frontend" && exit 1)
+	@test -f "deploy/package/start.sh" || (echo "Missing deploy/package/start.sh" && exit 1)
+	@test -f "deploy/package/stop.sh" || (echo "Missing deploy/package/stop.sh" && exit 1)
+	@test -f "deploy/package/application.yml" || (echo "Missing deploy/package/application.yml" && exit 1)
+	@test -f "deploy/package/env.template" || (echo "Missing deploy/package/env.template" && exit 1)
+	@cp $(JAR) $(STAGE_DIR)/hify/lib/hify-app.jar
+	@cp -R hify-web/dist/. $(STAGE_DIR)/hify/frontend
+	@cp deploy/package/start.sh deploy/package/stop.sh $(STAGE_DIR)/hify/bin/
+	@cp deploy/package/application.yml $(STAGE_DIR)/hify/config/application.yml
+	@cp deploy/package/env.template $(STAGE_DIR)/hify/env.template
+	@cp -R deploy/sql $(STAGE_DIR)/hify/deploy/sql
+	@chmod +x $(STAGE_DIR)/hify/bin/start.sh $(STAGE_DIR)/hify/bin/stop.sh
 	@tar -czf $(TARBALL) -C $(STAGE_DIR) hify
 	@rm -rf $(STAGE_DIR)
 	@echo ">>> 打包完成：$(TARBALL)"
@@ -61,12 +72,12 @@ package: build
 
 help:
 	@echo ""
-	@echo "  make start          启动后端 + 前端（MySQL/Redis 需先就绪）"
-	@echo "  make stop           优雅停止所有服务"
-	@echo "  make restart        重启所有服务"
+	@echo "  make start          开发启动：后端 + 前端（MySQL/Redis 需先就绪）"
+	@echo "  make stop           优雅停止开发启动的服务"
+	@echo "  make restart        重启开发服务"
 	@echo "  make build          构建后端 + 前端"
 	@echo "  make build-backend  仅构建后端（Maven）"
 	@echo "  make build-frontend 仅构建前端（Vite）"
 	@echo "  make clean          清理所有构建产物"
-	@echo "  make package        构建并打包为 $(TARBALL)"
+	@echo "  make package        构建本地部署包 $(TARBALL)（不包含 MySQL/Redis/pgvector/JDK）"
 	@echo ""
